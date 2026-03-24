@@ -44,7 +44,38 @@ def _safe_json_loads(text: str) -> dict:
     if candidate.startswith("```"):
         candidate = candidate.strip("`")
         candidate = candidate.replace("json", "", 1).strip()
-    return json.loads(candidate)
+    loaders = (
+        lambda s: json.loads(s),
+        lambda s: json.loads(s, strict=False),
+    )
+    for loader in loaders:
+        try:
+            return loader(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    start = candidate.find("{")
+    end = candidate.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        snippet = candidate[start : end + 1]
+        for loader in loaders:
+            try:
+                return loader(snippet)
+            except json.JSONDecodeError:
+                pass
+    raise json.JSONDecodeError("Unable to parse JSON payload", candidate, 0)
+
+
+def _repair_json_with_model(provider, malformed_text: str) -> dict:
+    repaired_text = provider.generate_text(
+        "You repair malformed JSON. Return valid JSON only with no extra words.",
+        (
+            "Repair this malformed JSON to valid JSON. Preserve fields and values when possible.\n"
+            f"{malformed_text}"
+        ),
+        json_mode=True,
+    )
+    return _safe_json_loads(repaired_text)
 
 
 def generate_post_game_analysis(game_id: str, logs: list[dict], analytics: dict) -> LLMResult:
@@ -161,6 +192,7 @@ def generate_character_cast(game_id: str, player_name: str) -> list[dict]:
         text = provider.generate_text(
             build_cast_generation_system_prompt(),
             build_cast_generation_user_prompt(game_id, player_name),
+            json_mode=True,
         )
         parsed = _safe_json_loads(text)
         characters = parsed.get("characters", [])
@@ -214,6 +246,7 @@ def generate_player_intent_action(
         text = provider.generate_text(
             build_player_intent_system_prompt(),
             build_player_intent_user_prompt(player_text, alive_targets, event),
+            json_mode=True,
         )
         parsed = _safe_json_loads(text)
         action_type = parsed.get("action_type", "quiet")
@@ -329,9 +362,18 @@ def generate_turn_resolution(
     cast: list[dict],
     history_tail: list[dict],
 ) -> dict:
+    fallback_dialogue = []
+    for c in cast[:2]:
+        fallback_dialogue.append(
+            {
+                "speaker_id": c.get("participant_id", ""),
+                "speaker_name": c.get("name", "Contestant"),
+                "line": "I heard what you said. I am watching who moves with intent and who hides.",
+            }
+        )
     fallback = {
         "narration": "A cautious silence follows your words; alliances tighten behind guarded expressions.",
-        "dialogue": [],
+        "dialogue": fallback_dialogue,
         "trust_on_player": {},
         "suspicion_on_player": {},
         "eliminated_id": "",
@@ -373,8 +415,12 @@ def generate_turn_resolution(
                 cast=cast,
                 history_tail=history_tail,
             ),
+            json_mode=True,
         )
-        parsed = _safe_json_loads(text)
+        try:
+            parsed = _safe_json_loads(text)
+        except json.JSONDecodeError:
+            parsed = _repair_json_with_model(provider, text)
         result = {
             "narration": str(parsed.get("narration", fallback["narration"])),
             "dialogue": parsed.get("dialogue", []),
@@ -392,5 +438,7 @@ def generate_turn_resolution(
             json.dumps(result),
         )
         return result
-    except Exception:
-        return fallback
+    except Exception as exc:
+        failed = dict(fallback)
+        failed["_error"] = f"turn_resolution_failed: {exc}"
+        return failed

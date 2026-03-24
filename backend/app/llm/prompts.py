@@ -195,7 +195,7 @@ def build_turn_resolution_user_prompt(
         "Keep character voice distinct, non-repetitive, and reactive to exact player wording.\n"
         "Rules:\n"
         "- dialogue lines must include disagreement/alignment dynamics when relevant.\n"
-        "- include 1 to 4 dialogue lines from different speakers when plausible.\n"
+        "- include 2 to 4 dialogue lines from different speakers when plausible.\n"
         "- trust_on_player and suspicion_on_player values are 0..100.\n"
         "- eliminated_id should usually be one alive participant; use empty string if no elimination this round.\n"
         "- keep output coherent with recent history.\n"

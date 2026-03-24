@@ -216,4 +216,6 @@ def to_public_state(state: GameState) -> dict:
             }
             for log in state.history
         ],
+        "story_events": state.story_events,
+        "scene_step": state.scene_step,
     }

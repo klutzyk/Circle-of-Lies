@@ -45,8 +45,10 @@ class GameState:
     suspicion: Matrix
     alliances: List[List[str]] = field(default_factory=list)
     history: List[RoundLog] = field(default_factory=list)
+    story_events: List[Dict[str, object]] = field(default_factory=list)
     current_event: str = ""
     winner: Optional[str] = None
+    scene_step: int = 0
 
     def alive_ids(self) -> List[str]:
         return [

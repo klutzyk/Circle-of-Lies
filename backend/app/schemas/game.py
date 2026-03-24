@@ -10,11 +10,6 @@ class StartGameRequest(BaseModel):
     max_rounds: int = Field(default=7, ge=6, le=8)
 
 
-class PlayerActionRequest(BaseModel):
-    action_type: str
-    target_id: Optional[str] = None
-
-
 class ActionCatalogItem(BaseModel):
     action_type: str
     label: str

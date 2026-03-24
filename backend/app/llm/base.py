@@ -8,5 +8,7 @@ class LLMProvider(ABC):
     model_name: str
 
     @abstractmethod
-    def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+    def generate_text(
+        self, system_prompt: str, user_prompt: str, json_mode: bool = False
+    ) -> str:
         raise NotImplementedError

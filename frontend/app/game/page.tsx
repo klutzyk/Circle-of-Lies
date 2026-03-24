@@ -11,11 +11,7 @@ import {
   startGame,
   submitStoryTurn,
 } from '@/lib/api';
-import {
-  AnalyticsPayload,
-  GamePayload,
-  LLMEnhancementPayload,
-} from '@/types/game';
+import { AnalyticsPayload, GamePayload, LLMEnhancementPayload } from '@/types/game';
 
 type TabId = 'narrative' | 'dossier' | 'signals';
 
@@ -59,21 +55,20 @@ export default function GamePage() {
   const narrativeLines = useMemo(() => {
     if (!game) return [] as string[];
     const lines: string[] = [];
-    for (const log of game.state.history) {
-      const targetName = log.player_action.target_id
-        ? game.state.participants[log.player_action.target_id]?.name
-        : '';
-      const eliminatedName = log.eliminated_id ? game.state.participants[log.eliminated_id]?.name : 'no one';
-      lines.push(`Round ${log.round_number}: ${log.event}.`);
-      lines.push(
-        targetName
-          ? `You chose ${log.player_action.action_type} toward ${targetName}.`
-          : `You chose ${log.player_action.action_type}.`
-      );
-      lines.push(`The vote ended with ${eliminatedName} removed from the table.`);
-      lines.push(
-        `Your social readings: trust ${log.summary.player_avg_trust.toFixed(1)} | suspicion ${log.summary.player_avg_suspicion.toFixed(1)}.`
-      );
+    const events = game.state.story_events ?? [];
+    for (const event of events) {
+      if (event.narration) {
+        lines.push(event.narration);
+      }
+      for (const line of event.dialogue ?? []) {
+        const label =
+          line.speaker_name?.trim() || game.state.participants[line.speaker_id]?.name || 'Unknown';
+        lines.push(`${label}: ${line.line}`);
+      }
+      if (event.eliminated_id) {
+        const eliminatedName = game.state.participants[event.eliminated_id]?.name || event.eliminated_id;
+        lines.push(`${eliminatedName} is forced out as the room falls into uneasy silence.`);
+      }
     }
     if (storyLine) lines.push(storyLine);
     for (const line of storyDialogue) {
@@ -123,6 +118,9 @@ export default function GamePage() {
       setGame(next);
       setStoryLine(next.story?.narration ?? 'You hold your cards close.');
       setStoryDialogue(next.story?.dialogue ?? []);
+      if (next.story?.llm_error) {
+        setError(`LLM turn issue: ${next.story.llm_error}`);
+      }
       if (next.summary.status === 'completed') {
         const report = await fetchAnalytics(next.summary.game_id);
         setAnalytics(report);
@@ -228,7 +226,7 @@ export default function GamePage() {
                 <>
                   {tab === 'narrative' && (
                     <div className="flex min-h-0 flex-1 flex-col">
-                      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[17px] leading-relaxed text-[#8de7a2]">
+                      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[15px] leading-relaxed text-[#8de7a2]">
                         {narrativeLines.length === 0 && <p>The game has not begun.</p>}
                         {narrativeLines.map((line, idx) => (
                           <p key={`${idx}-${line.slice(0, 10)}`}>{line}</p>

@@ -14,7 +14,7 @@ from app.db.repository import (
     save_game,
 )
 from app.engine.analytics import build_analytics
-from app.engine.engine import advance_round, create_game
+from app.engine.engine import create_game
 from app.engine.state import (
     build_participants_from_generated_cast,
     clamp,
@@ -47,23 +47,6 @@ def fetch_game_or_404(game_id: str) -> GameState:
     if not state:
         raise HTTPException(status_code=404, detail="Game not found")
     return state
-
-
-def play_action(game_id: str, action_type: str, target_id: str | None) -> GameState:
-    state = fetch_game_or_404(game_id)
-    try:
-        next_state = advance_round(state, action_type=action_type, target_id=target_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    save_game(next_state)
-    replace_round_logs(next_state.game_id, next_state.history)
-
-    if next_state.status == "completed":
-        analytics = build_analytics(next_state)
-        save_analytics(next_state.game_id, analytics)
-
-    return next_state
 
 
 def public_game_payload(state: GameState) -> dict:
@@ -198,7 +181,9 @@ def play_story_turn_payload(game_id: str, player_text: str) -> dict:
             except (TypeError, ValueError):
                 pass
 
-    eliminated_id = str(llm_turn.get("eliminated_id", "") or "")
+    # Conversation-first pacing: vote/elimination only on the second scene step.
+    is_vote_step = state.scene_step >= 1
+    eliminated_id = str(llm_turn.get("eliminated_id", "") or "") if is_vote_step else ""
     if eliminated_id and eliminated_id in alive_ids_before:
         state.participants[eliminated_id].eliminated_round = state.current_round
 
@@ -222,30 +207,47 @@ def play_story_turn_payload(game_id: str, player_text: str) -> dict:
         "alive_after_vote": state.alive_ids(),
     }
 
-    state.history.append(
-        RoundLog(
-            round_number=state.current_round,
-            event=state.current_event,
-            player_action={"actor_id": "player", "action_type": "dialogue_turn", "target_id": ""},
-            ai_actions=ai_actions[:5],
-            votes={},
-            eliminated_id=eliminated_id or None,
-            summary=summary,
-        )
+    state.story_events.append(
+        {
+            "round_number": state.current_round,
+            "scene_step": state.scene_step + 1,
+            "player_text": player_text,
+            "narration": llm_turn.get("narration", ""),
+            "dialogue": llm_turn.get("dialogue", []),
+            "eliminated_id": eliminated_id or None,
+            "summary": summary,
+        }
     )
 
-    player_alive = state.participants["player"].eliminated_round is None
-    if not player_alive:
-        state.status = "completed"
-        state.phase = "ended"
-        state.winner = "ai"
-    elif state.current_round >= state.max_rounds or len(state.alive_ids()) <= 2:
-        state.status = "completed"
-        state.phase = "ended"
-        state.winner = "player"
+    if is_vote_step:
+        state.history.append(
+            RoundLog(
+                round_number=state.current_round,
+                event=state.current_event,
+                player_action={"actor_id": "player", "action_type": "dialogue_turn", "target_id": ""},
+                ai_actions=ai_actions[:5],
+                votes={},
+                eliminated_id=eliminated_id or None,
+                summary=summary,
+            )
+        )
+
+        player_alive = state.participants["player"].eliminated_round is None
+        if not player_alive:
+            state.status = "completed"
+            state.phase = "ended"
+            state.winner = "ai"
+        elif state.current_round >= state.max_rounds or len(state.alive_ids()) <= 2:
+            state.status = "completed"
+            state.phase = "ended"
+            state.winner = "player"
+        else:
+            state.current_round += 1
+            state.current_event = current_event(state.current_round)
+            state.phase = "awaiting_player_action"
+        state.scene_step = 0
     else:
-        state.current_round += 1
-        state.current_event = current_event(state.current_round)
+        state.scene_step += 1
         state.phase = "awaiting_player_action"
 
     save_game(state)
@@ -261,5 +263,7 @@ def play_story_turn_payload(game_id: str, player_text: str) -> dict:
         "interpreted_target_id": "",
         "narration": llm_turn.get("narration", ""),
         "dialogue": llm_turn.get("dialogue", []),
+        "vote_resolved": is_vote_step,
+        "llm_error": llm_turn.get("_error", ""),
     }
     return payload

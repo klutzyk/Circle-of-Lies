@@ -8,7 +8,6 @@ from app.schemas.game import (
     FlavorDialogueRequest,
     GameStateResponse,
     LLMEnhancementResponse,
-    PlayerActionRequest,
     RoundLogsResponse,
     StartGameRequest,
     StoryTurnRequest,
@@ -18,7 +17,6 @@ from app.services.game_service import (
     fetch_game_or_404,
     flavor_dialogue_payload,
     logs_payload,
-    play_action,
     play_story_turn_payload,
     post_game_llm_analysis_payload,
     public_game_payload,
@@ -42,12 +40,6 @@ def start_game(request: StartGameRequest):
 @router.get("/games/{game_id}", response_model=GameStateResponse)
 def get_game(game_id: str):
     state = fetch_game_or_404(game_id)
-    return public_game_payload(state)
-
-
-@router.post("/games/{game_id}/actions", response_model=GameStateResponse)
-def submit_action(game_id: str, request: PlayerActionRequest):
-    state = play_action(game_id, request.action_type, request.target_id)
     return public_game_payload(state)
 
 

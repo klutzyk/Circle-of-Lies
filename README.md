@@ -57,12 +57,11 @@ The game ends when the player is eliminated, the round limit is reached, or only
 
 - `POST /api/games`: create game
 - `GET /api/games/{game_id}`: current game state
-- `POST /api/games/{game_id}/actions`: play one round
+- `POST /api/games/{game_id}/story-turn`: play one social turn from natural-language player input
 - `GET /api/games/{game_id}/logs`: structured round logs
 - `GET /api/games/{game_id}/analytics`: end-of-game analytics
 - `GET /api/games/{game_id}/llm/post-game-analysis`: optional LLM strategic summary
 - `POST /api/games/{game_id}/llm/flavor-dialogue`: optional AI character flavor dialogue
-- `POST /api/games/{game_id}/story-turn`: optional free-text turn interpreted by LLM
 - `GET /api/meta/actions`: action catalog
 
 ## Local Setup

@@ -15,15 +15,21 @@ class GeminiProvider(LLMProvider):
             raise ValueError("GEMINI_API_KEY is not configured")
         self._api_key = GEMINI_API_KEY
 
-    def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+    def generate_text(
+        self, system_prompt: str, user_prompt: str, json_mode: bool = False
+    ) -> str:
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
             f"{self.model_name}:generateContent?key={self._api_key}"
         )
+        generation_config = {"temperature": 0.75, "maxOutputTokens": 900}
+        if json_mode:
+            generation_config["responseMimeType"] = "application/json"
+
         payload = {
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{"parts": [{"text": user_prompt}]}],
-            "generationConfig": {"temperature": 0.4, "maxOutputTokens": 350},
+            "generationConfig": generation_config,
         }
 
         with httpx.Client(timeout=LLM_TIMEOUT_SECONDS) as client:

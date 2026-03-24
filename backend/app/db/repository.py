@@ -33,8 +33,10 @@ def deserialize_state(payload: str) -> GameState:
         suspicion=raw["suspicion"],
         alliances=raw.get("alliances", []),
         history=history,
+        story_events=raw.get("story_events", []),
         current_event=raw.get("current_event", ""),
         winner=raw.get("winner"),
+        scene_step=raw.get("scene_step", 0),
     )
 
 

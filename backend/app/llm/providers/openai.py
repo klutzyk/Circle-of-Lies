@@ -15,7 +15,9 @@ class OpenAIProvider(LLMProvider):
             raise ValueError("OPENAI_API_KEY is not configured")
         self._api_key = OPENAI_API_KEY
 
-    def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+    def generate_text(
+        self, system_prompt: str, user_prompt: str, json_mode: bool = False
+    ) -> str:
         payload = {
             "model": self.model_name,
             "messages": [
@@ -25,6 +27,8 @@ class OpenAIProvider(LLMProvider):
             "temperature": 0.4,
             "max_tokens": 350,
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
 
         with httpx.Client(timeout=LLM_TIMEOUT_SECONDS) as client:
             response = client.post(

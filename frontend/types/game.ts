@@ -38,6 +38,19 @@ export type GamePayload = {
     alliances: string[][];
     current_event: string;
     history: RoundLog[];
+    story_events?: {
+      round_number: number;
+      scene_step: number;
+      player_text: string;
+      narration: string;
+      dialogue: { speaker_id: string; speaker_name: string; line: string }[];
+      eliminated_id: string | null;
+      summary: {
+        player_avg_trust: number;
+        player_avg_suspicion: number;
+        alive_after_vote: string[];
+      };
+    }[];
   };
 };
 
@@ -80,5 +93,7 @@ export type StoryTurnPayload = GamePayload & {
     interpreted_target_id: string;
     narration: string;
     dialogue?: { speaker_id: string; speaker_name: string; line: string }[];
+    vote_resolved?: boolean;
+    llm_error?: string;
   };
 };
