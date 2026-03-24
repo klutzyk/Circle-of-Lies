@@ -60,5 +60,17 @@ def init_db() -> None:
                 analytics_json TEXT NOT NULL,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS llm_cache (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                game_id TEXT NOT NULL,
+                use_case TEXT NOT NULL,
+                cache_key TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model TEXT NOT NULL,
+                output_text TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(game_id, use_case, cache_key)
+            );
             """
         )

@@ -2,8 +2,20 @@
 
 import { useMemo, useState } from 'react';
 
-import { fetchActionCatalog, fetchAnalytics, startGame, submitAction } from '@/lib/api';
-import { ActionCatalogItem, AnalyticsPayload, GamePayload } from '@/types/game';
+import {
+  fetchActionCatalog,
+  fetchAnalytics,
+  fetchFlavorDialogue,
+  fetchPostGameLLMAnalysis,
+  startGame,
+  submitAction,
+} from '@/lib/api';
+import {
+  ActionCatalogItem,
+  AnalyticsPayload,
+  GamePayload,
+  LLMEnhancementPayload,
+} from '@/types/game';
 
 function TimelineChart({
   title,
@@ -76,6 +88,9 @@ export default function GamePage() {
   const [actionType, setActionType] = useState('quiet');
   const [targetId, setTargetId] = useState<string>('');
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
+  const [llmSummary, setLlmSummary] = useState<LLMEnhancementPayload | null>(null);
+  const [llmDialogue, setLlmDialogue] = useState<LLMEnhancementPayload | null>(null);
+  const [dialogueSpeakerId, setDialogueSpeakerId] = useState('ai_1');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -99,6 +114,8 @@ export default function GamePage() {
       setActions(catalog.actions);
       setGame(started);
       setAnalytics(null);
+      setLlmSummary(null);
+      setLlmDialogue(null);
       setActionType(catalog.actions[0]?.action_type ?? 'quiet');
       setTargetId('');
     } catch (e) {
@@ -126,6 +143,34 @@ export default function GamePage() {
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to submit action');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onGenerateLLMSummary() {
+    if (!game) return;
+    setLoading(true);
+    setError('');
+    try {
+      const summary = await fetchPostGameLLMAnalysis(game.summary.game_id);
+      setLlmSummary(summary);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to generate LLM summary');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onGenerateFlavorDialogue() {
+    if (!game) return;
+    setLoading(true);
+    setError('');
+    try {
+      const dialogue = await fetchFlavorDialogue(game.summary.game_id, dialogueSpeakerId);
+      setLlmDialogue(dialogue);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to generate flavor dialogue');
     } finally {
       setLoading(false);
     }
@@ -224,6 +269,31 @@ export default function GamePage() {
                 <p className="mt-3 text-xs text-slate/75">
                   {selectedAction?.description ?? 'Select an action to proceed.'}
                 </p>
+                <div className="mt-4 grid gap-2 md:grid-cols-[1fr_auto]">
+                  <select
+                    value={dialogueSpeakerId}
+                    onChange={(e) => setDialogueSpeakerId(e.target.value)}
+                    className="rounded-lg border border-black/15 bg-white px-3 py-2 text-sm"
+                  >
+                    {aliveTargets.map((target) => (
+                      <option key={target.id} value={target.id}>
+                        {target.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={onGenerateFlavorDialogue}
+                    disabled={loading || !game}
+                    className="rounded-lg border border-slate/20 bg-white px-4 py-2 text-sm font-semibold text-slate disabled:opacity-55"
+                  >
+                    Generate Flavor Line
+                  </button>
+                </div>
+                {llmDialogue && (
+                  <p className="mt-2 rounded-lg bg-slate/5 p-2 text-sm text-slate/85">
+                    {llmDialogue.text}
+                  </p>
+                )}
                 {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
               </div>
 
@@ -280,6 +350,35 @@ export default function GamePage() {
                     data={analytics.analytics.suspicion_timeline}
                     color="#b7582d"
                   />
+                  <div className="card p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="font-display text-lg text-slate">Optional LLM Strategy Review</h3>
+                      <button
+                        onClick={onGenerateLLMSummary}
+                        disabled={loading}
+                        className="rounded-lg bg-slate px-3 py-2 text-xs font-semibold text-white disabled:opacity-55"
+                      >
+                        Generate
+                      </button>
+                    </div>
+                    {!llmSummary && (
+                      <p className="text-sm text-slate/75">
+                        Uses logs + analytics only. If no API key is configured, deterministic analytics still apply.
+                      </p>
+                    )}
+                    {llmSummary && (
+                      <div className="space-y-2 text-sm text-slate/85">
+                        <p className="text-xs text-slate/70">
+                          Provider: {llmSummary.provider} / {llmSummary.model}
+                          {llmSummary.cached ? ' (cached)' : ''}
+                          {!llmSummary.enabled && llmSummary.reason ? ` - ${llmSummary.reason}` : ''}
+                        </p>
+                        <pre className="whitespace-pre-wrap rounded-lg bg-slate/5 p-3 font-body text-sm">
+                          {llmSummary.text}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

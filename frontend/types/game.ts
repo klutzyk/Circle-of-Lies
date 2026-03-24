@@ -58,3 +58,14 @@ export type AnalyticsPayload = {
     game_theory_tags: string[];
   };
 };
+
+export type LLMEnhancementPayload = {
+  game_id: string;
+  use_case: string;
+  text: string;
+  provider: string;
+  model: string;
+  cached: boolean;
+  enabled: boolean;
+  reason: string;
+};

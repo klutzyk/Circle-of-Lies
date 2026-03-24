@@ -165,3 +165,43 @@ def get_analytics(game_id: str) -> Optional[dict]:
     if not row:
         return None
     return json.loads(row["analytics_json"])
+
+
+def save_llm_cache(
+    game_id: str,
+    use_case: str,
+    cache_key: str,
+    provider: str,
+    model: str,
+    text: str,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO llm_cache (game_id, use_case, cache_key, provider, model, output_text)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(game_id, use_case, cache_key) DO UPDATE SET
+                output_text=excluded.output_text
+            """,
+            (game_id, use_case, cache_key, provider, model, text),
+        )
+
+
+def get_llm_cache(game_id: str, use_case: str, cache_key: str) -> Optional[dict]:
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT provider, model, output_text
+            FROM llm_cache
+            WHERE game_id = ? AND use_case = ? AND cache_key = ?
+            """,
+            (game_id, use_case, cache_key),
+        ).fetchone()
+
+    if not row:
+        return None
+    return {
+        "provider": row["provider"],
+        "model": row["model"],
+        "text": row["output_text"],
+    }

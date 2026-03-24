@@ -5,7 +5,9 @@ from fastapi import APIRouter
 from app.engine.actions import ACTION_CATALOG
 from app.schemas.game import (
     AnalyticsResponse,
+    FlavorDialogueRequest,
     GameStateResponse,
+    LLMEnhancementResponse,
     PlayerActionRequest,
     RoundLogsResponse,
     StartGameRequest,
@@ -13,8 +15,10 @@ from app.schemas.game import (
 from app.services.game_service import (
     analytics_payload,
     fetch_game_or_404,
+    flavor_dialogue_payload,
     logs_payload,
     play_action,
+    post_game_llm_analysis_payload,
     public_game_payload,
     start_new_game,
 )
@@ -53,3 +57,13 @@ def get_logs(game_id: str):
 @router.get("/games/{game_id}/analytics", response_model=AnalyticsResponse)
 def get_analytics(game_id: str):
     return analytics_payload(game_id)
+
+
+@router.get("/games/{game_id}/llm/post-game-analysis", response_model=LLMEnhancementResponse)
+def get_post_game_analysis(game_id: str):
+    return post_game_llm_analysis_payload(game_id)
+
+
+@router.post("/games/{game_id}/llm/flavor-dialogue", response_model=LLMEnhancementResponse)
+def get_flavor_dialogue(game_id: str, request: FlavorDialogueRequest):
+    return flavor_dialogue_payload(game_id, request.speaker_id)

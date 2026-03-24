@@ -8,7 +8,7 @@ export default function HomePage() {
           <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-moss">Game Theory Simulator</p>
           <h1 className="font-display text-4xl text-slate md:text-6xl">Circle of Lies</h1>
           <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate/90 md:text-lg">
-            A portfolio-grade social strategy game where trust, suspicion, and alliances evolve through deterministic,
+            A social strategy game where trust, suspicion, and alliances evolve through deterministic,
             explainable AI heuristics.
           </p>
           <div className="mt-8 grid gap-3 text-sm text-slate/90 md:grid-cols-3">

@@ -60,6 +60,8 @@ The game ends when the player is eliminated, the round limit is reached, or only
 - `POST /api/games/{game_id}/actions`: play one round
 - `GET /api/games/{game_id}/logs`: structured round logs
 - `GET /api/games/{game_id}/analytics`: end-of-game analytics
+- `GET /api/games/{game_id}/llm/post-game-analysis`: optional LLM strategic summary
+- `POST /api/games/{game_id}/llm/flavor-dialogue`: optional AI character flavor dialogue
 - `GET /api/meta/actions`: action catalog
 
 ## Local Setup
@@ -71,6 +73,7 @@ cd backend
 python -m venv .venv
 . .venv/Scripts/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+# Optional: copy .env.example to .env and set provider keys if you want LLM enhancements.
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -92,10 +95,25 @@ cd backend
 pytest
 ```
 
-## Optional LLM Extension Points (Not Core MVP)
+These remain feature-flagged and never alter deterministic engine correctness.
 
-- Post-game strategic coaching summary
-- Flavor dialogue generation
-- Scenario generation and adaptive narrative variants
+## LLM Feature Flags
 
-These should remain feature-flagged and not alter deterministic engine correctness.
+Backend environment variables:
+
+```bash
+LLM_ENABLED=false
+LLM_PROVIDER=gemini   # gemini or openai
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-1.5-flash
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+LLM_TIMEOUT_SECONDS=20
+```
+
+If `LLM_ENABLED=false` or the provider key is missing, the app continues to work normally using deterministic analytics only.
+
+## Rule-Based vs LLM Tradeoff
+
+- Rule-based simulation drives all gameplay decisions to preserve reproducibility, low latency, and testability.
+- LLM enhancements are read-only overlays on completed logs/state snapshots.

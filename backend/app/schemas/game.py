@@ -44,3 +44,18 @@ class RoundLogsResponse(BaseModel):
 class AnalyticsResponse(BaseModel):
     game_id: str
     analytics: dict
+
+
+class FlavorDialogueRequest(BaseModel):
+    speaker_id: str
+
+
+class LLMEnhancementResponse(BaseModel):
+    game_id: str
+    use_case: str
+    text: str
+    provider: str
+    model: str
+    cached: bool
+    enabled: bool
+    reason: str = ""

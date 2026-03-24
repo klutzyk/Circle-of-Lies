@@ -13,6 +13,7 @@ from app.db.repository import (
 from app.engine.analytics import build_analytics
 from app.engine.engine import advance_round, create_game
 from app.engine.state import to_public_state
+from app.llm.service import generate_flavor_dialogue, generate_post_game_analysis
 from app.models.domain import GameState
 
 
@@ -78,3 +79,46 @@ def analytics_payload(game_id: str) -> dict:
     if state.status == "completed":
         save_analytics(game_id, analytics)
     return {"game_id": game_id, "analytics": analytics}
+
+
+def post_game_llm_analysis_payload(game_id: str) -> dict:
+    state = fetch_game_or_404(game_id)
+    logs = get_round_logs(game_id)
+    analytics = get_analytics(game_id) or build_analytics(state)
+
+    result = generate_post_game_analysis(game_id=game_id, logs=logs, analytics=analytics)
+    return {
+        "game_id": game_id,
+        "use_case": "post_game_analysis",
+        "text": result.text,
+        "provider": result.provider,
+        "model": result.model,
+        "cached": result.cached,
+        "enabled": result.enabled,
+        "reason": result.reason,
+    }
+
+
+def flavor_dialogue_payload(game_id: str, speaker_id: str) -> dict:
+    state = fetch_game_or_404(game_id)
+    speaker = state.participants.get(speaker_id)
+    if not speaker:
+        raise HTTPException(status_code=404, detail="Speaker not found")
+
+    result = generate_flavor_dialogue(
+        game_id=game_id,
+        speaker_name=speaker.name,
+        speaker_traits=speaker.traits,
+        context_event=state.current_event,
+        round_number=state.current_round,
+    )
+    return {
+        "game_id": game_id,
+        "use_case": "flavor_dialogue",
+        "text": result.text,
+        "provider": result.provider,
+        "model": result.model,
+        "cached": result.cached,
+        "enabled": result.enabled,
+        "reason": result.reason,
+    }
