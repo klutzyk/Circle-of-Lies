@@ -1,8 +1,8 @@
 # Circle of Lies
 
-Circle of Lies is an original social strategy simulator where one human player competes against five deterministic AI opponents in a multi-round trust game.
+Circle of Lies is an original social strategy simulator where one human player competes against five AI opponents in a multi-round trust game.
 
-The project is designed for portfolio review and interviews: clear architecture, deterministic game logic, explainable AI behavior, and end-of-game analytics.
+The project is designed for portfolio review and interviews: clear architecture, immersive narrative AI behavior, and end-of-game analytics.
 
 ## Product Concept
 
@@ -11,12 +11,12 @@ The project is designed for portfolio review and interviews: clear architecture,
 - **Primary mechanics**: trust, suspicion, alliances, social signaling, and elimination votes
 - **Educational framing**: practical game theory concepts in motion
 
-## Why Rule-Based Agents for MVP
+## Why LLM-Driven Story Mode
 
-- Deterministic and testable outcomes
-- Lower operational complexity than LLM-in-the-loop turn logic
-- Easier to explain in architecture and system design interviews
-- Clear extension points for optional LLM features later
+- Richer social conversations and distinct character voices
+- Dynamic reactions to player wording and social pressure
+- Faster iteration on narrative quality and immersion
+- Provider abstraction keeps integrations maintainable
 
 ## Tech Stack
 
@@ -31,8 +31,8 @@ See [docs/architecture.md](docs/architecture.md).
 
 High-level modules:
 
-- `backend/app/engine`: deterministic game state transitions
-- `backend/app/agents`: rule-based AI heuristics
+- `backend/app/engine`: game state transitions
+- `backend/app/agents`: agent utilities
 - `backend/app/api`: FastAPI route layer
 - `backend/app/services`: orchestration and application use-cases
 - `backend/app/db`: SQLite schema + repository functions
@@ -46,7 +46,7 @@ For each round:
 
 1. Event context is presented
 2. Player selects an action (optionally with a target)
-3. AI agents react with deterministic heuristics
+3. AI agents react through LLM-generated social turns
 4. Trust/suspicion/alliance state updates
 5. Group vote eliminates one participant
 6. Round summary is logged and shown
@@ -96,7 +96,7 @@ cd backend
 pytest
 ```
 
-These remain feature-flagged and never alter deterministic engine correctness.
+These remain feature-flagged and can be configured per environment.
 
 ## LLM Feature Flags
 
@@ -113,10 +113,10 @@ OPENAI_MODEL=gpt-4o-mini
 LLM_TIMEOUT_SECONDS=20
 ```
 
-If `LLM_ENABLED=false` or the provider key is missing, the app continues to work normally using deterministic analytics only.
-If `LLM_STORY_MODE=true`, LLM can generate character bios/traits and map player free-text to in-game actions, while the resolver remains deterministic.
+If `LLM_ENABLED=false` or the provider key is missing, LLM features return safe fallback responses.
+If `LLM_STORY_MODE=true`, LLM can generate character bios/traits and resolve free-text story turns with character reactions.
 
-## Rule-Based vs LLM Tradeoff
+## LLM Tradeoff
 
-- Rule-based simulation drives all gameplay decisions to preserve reproducibility, low latency, and testability.
-- LLM enhancements are read-only overlays on completed logs/state snapshots.
+- LLM-driven turns increase immersion and social realism.
+- Responses are non-deterministic and may vary between runs.

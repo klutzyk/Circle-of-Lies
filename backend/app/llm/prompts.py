@@ -115,3 +115,96 @@ def build_player_intent_user_prompt(
         f"Player message: {player_text}\n"
         f"Return JSON only in this schema: {json.dumps(schema)}"
     )
+
+
+def build_conversation_system_prompt() -> str:
+    return (
+        "You write immersive social strategy scene narration and dialogue. "
+        "Keep continuity with player input and cast traits. "
+        "No markdown and no meta commentary."
+    )
+
+
+def build_conversation_user_prompt(
+    game_id: str,
+    round_number: int,
+    event: str,
+    player_name: str,
+    player_text: str,
+    interpreted_action: str,
+    interpreted_target_id: str,
+    cast: list[dict],
+) -> str:
+    schema = {
+        "narration": "2-4 vivid sentences setting social tension and consequences",
+        "dialogue": [
+            {"speaker_id": "ai_1", "speaker_name": "Mara", "line": "single in-character sentence"}
+        ],
+    }
+    return (
+        "Create one short narrative beat plus dialogue reactions.\n"
+        "Rules:\n"
+        "- narration must be atmospheric and specific.\n"
+        "- include 1 to 3 dialogue lines.\n"
+        "- at least one line must directly react to the player's message.\n"
+        "- speakers must be alive cast members only.\n"
+        "- each dialogue line max 22 words.\n"
+        f"Game: {game_id}\n"
+        f"Round: {round_number}\n"
+        f"Event: {event}\n"
+        f"Player: {player_name}\n"
+        f"Player message: {player_text}\n"
+        f"Interpreted action: {interpreted_action}\n"
+        f"Interpreted target_id: {interpreted_target_id}\n"
+        f"Cast: {cast}\n"
+        f"Return JSON only in schema: {json.dumps(schema)}"
+    )
+
+
+def build_turn_resolution_system_prompt() -> str:
+    return (
+        "You are the simulation director for a social strategy game. "
+        "Generate believable evolving interactions that reflect personality and context. "
+        "Return strict JSON only."
+    )
+
+
+def build_turn_resolution_user_prompt(
+    game_id: str,
+    round_number: int,
+    event: str,
+    player_name: str,
+    player_text: str,
+    cast: list[dict],
+    history_tail: list[dict],
+) -> str:
+    schema = {
+        "narration": "2-5 vivid sentences",
+        "dialogue": [
+            {"speaker_id": "ai_1", "speaker_name": "Mara", "line": "short line <= 24 words"}
+        ],
+        "trust_on_player": {"ai_1": 63.0, "ai_2": 49.0},
+        "suspicion_on_player": {"ai_1": 31.0, "ai_2": 58.0},
+        "eliminated_id": "ai_3 or player or empty string",
+        "ai_actions": [
+            {"actor_id": "ai_1", "action_type": "accuse|defend|quiet|share_info|build_alliance|spread_doubt", "target_id": "ai_2 or player or empty"}
+        ],
+    }
+    return (
+        "Simulate this round from player dialogue. "
+        "Keep character voice distinct, non-repetitive, and reactive to exact player wording.\n"
+        "Rules:\n"
+        "- dialogue lines must include disagreement/alignment dynamics when relevant.\n"
+        "- include 1 to 4 dialogue lines from different speakers when plausible.\n"
+        "- trust_on_player and suspicion_on_player values are 0..100.\n"
+        "- eliminated_id should usually be one alive participant; use empty string if no elimination this round.\n"
+        "- keep output coherent with recent history.\n"
+        f"Game: {game_id}\n"
+        f"Round: {round_number}\n"
+        f"Event: {event}\n"
+        f"Player: {player_name}\n"
+        f"Player text: {player_text}\n"
+        f"Alive cast: {cast}\n"
+        f"Recent history: {history_tail}\n"
+        f"Return JSON only in schema: {json.dumps(schema)}"
+    )

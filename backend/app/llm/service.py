@@ -9,12 +9,16 @@ from app.llm.factory import build_provider
 from app.llm.prompts import (
     build_cast_generation_system_prompt,
     build_cast_generation_user_prompt,
+    build_conversation_system_prompt,
+    build_conversation_user_prompt,
     build_flavor_system_prompt,
     build_flavor_user_prompt,
     build_player_intent_system_prompt,
     build_player_intent_user_prompt,
     build_post_game_system_prompt,
     build_post_game_user_prompt,
+    build_turn_resolution_system_prompt,
+    build_turn_resolution_user_prompt,
 )
 from app.llm.types import LLMResult
 from app.engine.actions import VALID_ACTIONS
@@ -230,3 +234,163 @@ def generate_player_intent_action(
         return result
     except Exception:
         return {"action_type": "quiet", "target_id": "", "narration": "You stay guarded and observe reactions."}
+
+
+def generate_conversation_beat(
+    game_id: str,
+    round_number: int,
+    event: str,
+    player_name: str,
+    player_text: str,
+    interpreted_action: str,
+    interpreted_target_id: str,
+    cast: list[dict],
+) -> dict:
+    fallback = {
+        "narration": "A tense hush settles over the table as your words force everyone to recalculate their position.",
+        "dialogue": [],
+    }
+
+    if not LLM_ENABLED:
+        return fallback
+
+    payload = {
+        "game_id": game_id,
+        "round_number": round_number,
+        "event": event,
+        "player_name": player_name,
+        "player_text": player_text,
+        "interpreted_action": interpreted_action,
+        "interpreted_target_id": interpreted_target_id,
+        "cast": cast,
+    }
+    cache_key = _hash_payload(payload)
+    cached = get_llm_cache(game_id, "conversation_beat", cache_key)
+    if cached:
+        try:
+            parsed = _safe_json_loads(cached["text"])
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    try:
+        provider = build_provider()
+        text = provider.generate_text(
+            build_conversation_system_prompt(),
+            build_conversation_user_prompt(
+                game_id=game_id,
+                round_number=round_number,
+                event=event,
+                player_name=player_name,
+                player_text=player_text,
+                interpreted_action=interpreted_action,
+                interpreted_target_id=interpreted_target_id,
+                cast=cast,
+            ),
+        )
+        parsed = _safe_json_loads(text)
+        narration = str(parsed.get("narration", fallback["narration"]))
+        dialogue = parsed.get("dialogue", [])
+        if not isinstance(dialogue, list):
+            dialogue = []
+        # Guardrail: only keep well-formed lines with speaker id.
+        cleaned = []
+        for item in dialogue[:3]:
+            if not isinstance(item, dict):
+                continue
+            speaker_id = str(item.get("speaker_id", "")).strip()
+            speaker_name = str(item.get("speaker_name", "")).strip()
+            line = str(item.get("line", "")).strip()
+            if speaker_id and line:
+                cleaned.append(
+                    {"speaker_id": speaker_id, "speaker_name": speaker_name, "line": line}
+                )
+        result = {"narration": narration, "dialogue": cleaned}
+        save_llm_cache(
+            game_id,
+            "conversation_beat",
+            cache_key,
+            provider.provider_name,
+            provider.model_name,
+            json.dumps(result),
+        )
+        return result
+    except Exception:
+        return fallback
+
+
+def generate_turn_resolution(
+    game_id: str,
+    round_number: int,
+    event: str,
+    player_name: str,
+    player_text: str,
+    cast: list[dict],
+    history_tail: list[dict],
+) -> dict:
+    fallback = {
+        "narration": "A cautious silence follows your words; alliances tighten behind guarded expressions.",
+        "dialogue": [],
+        "trust_on_player": {},
+        "suspicion_on_player": {},
+        "eliminated_id": "",
+        "ai_actions": [],
+    }
+
+    if not LLM_ENABLED:
+        return fallback
+
+    payload = {
+        "game_id": game_id,
+        "round_number": round_number,
+        "event": event,
+        "player_name": player_name,
+        "player_text": player_text,
+        "cast": cast,
+        "history_tail": history_tail,
+    }
+    cache_key = _hash_payload(payload)
+    cached = get_llm_cache(game_id, "turn_resolution", cache_key)
+    if cached:
+        try:
+            parsed = _safe_json_loads(cached["text"])
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    try:
+        provider = build_provider()
+        text = provider.generate_text(
+            build_turn_resolution_system_prompt(),
+            build_turn_resolution_user_prompt(
+                game_id=game_id,
+                round_number=round_number,
+                event=event,
+                player_name=player_name,
+                player_text=player_text,
+                cast=cast,
+                history_tail=history_tail,
+            ),
+        )
+        parsed = _safe_json_loads(text)
+        result = {
+            "narration": str(parsed.get("narration", fallback["narration"])),
+            "dialogue": parsed.get("dialogue", []),
+            "trust_on_player": parsed.get("trust_on_player", {}),
+            "suspicion_on_player": parsed.get("suspicion_on_player", {}),
+            "eliminated_id": str(parsed.get("eliminated_id", "") or ""),
+            "ai_actions": parsed.get("ai_actions", []),
+        }
+        save_llm_cache(
+            game_id,
+            "turn_resolution",
+            cache_key,
+            provider.provider_name,
+            provider.model_name,
+            json.dumps(result),
+        )
+        return result
+    except Exception:
+        return fallback

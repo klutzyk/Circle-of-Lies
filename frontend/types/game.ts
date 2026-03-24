@@ -79,5 +79,6 @@ export type StoryTurnPayload = GamePayload & {
     interpreted_action: string;
     interpreted_target_id: string;
     narration: string;
+    dialogue?: { speaker_id: string; speaker_name: string; line: string }[];
   };
 };

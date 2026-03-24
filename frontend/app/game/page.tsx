@@ -6,22 +6,18 @@ import { useEffect, useMemo, useState } from 'react';
 import terminalImage from '../../assets/terminal.jpg';
 import terminalFinalImage from '../../assets/terminal4.jpg';
 import {
-  fetchActionCatalog,
   fetchAnalytics,
-  fetchFlavorDialogue,
   fetchPostGameLLMAnalysis,
   startGame,
-  submitAction,
   submitStoryTurn,
 } from '@/lib/api';
 import {
-  ActionCatalogItem,
   AnalyticsPayload,
   GamePayload,
   LLMEnhancementPayload,
 } from '@/types/game';
 
-type TabId = 'narrative' | 'dossier' | 'signals' | 'controls';
+type TabId = 'narrative' | 'dossier' | 'signals';
 
 function TimelineChart({
   title,
@@ -47,29 +43,18 @@ export default function GamePage() {
   const [playerName, setPlayerName] = useState('Operator');
   const [maxRounds, setMaxRounds] = useState(7);
   const [game, setGame] = useState<GamePayload | null>(null);
-  const [actions, setActions] = useState<ActionCatalogItem[]>([]);
-  const [actionType, setActionType] = useState('quiet');
-  const [targetId, setTargetId] = useState('');
   const [playerText, setPlayerText] = useState('I want to stay calm and align with someone reliable this round.');
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [llmSummary, setLlmSummary] = useState<LLMEnhancementPayload | null>(null);
-  const [llmDialogue, setLlmDialogue] = useState<LLMEnhancementPayload | null>(null);
-  const [dialogueSpeakerId, setDialogueSpeakerId] = useState('ai_1');
+  const [storyDialogue, setStoryDialogue] = useState<
+    { speaker_id: string; speaker_name: string; line: string }[]
+  >([]);
   const [storyLine, setStoryLine] = useState('The room is silent. Six minds scan for weakness.');
   const [tab, setTab] = useState<TabId>('narrative');
   const [zoomed, setZoomed] = useState(false);
   const [showFinalTerminal, setShowFinalTerminal] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const aliveTargets = useMemo(() => {
-    if (!game) return [] as { id: string; name: string }[];
-    return Object.entries(game.state.participants)
-      .filter(([id, p]) => id !== 'player' && p.eliminated_round === null)
-      .map(([id, p]) => ({ id, name: p.name }));
-  }, [game]);
-
-  const selectedAction = actions.find((a) => a.action_type === actionType);
 
   const narrativeLines = useMemo(() => {
     if (!game) return [] as string[];
@@ -91,29 +76,26 @@ export default function GamePage() {
       );
     }
     if (storyLine) lines.push(storyLine);
-    if (llmDialogue?.text) lines.push(llmDialogue.text);
+    for (const line of storyDialogue) {
+      const label = line.speaker_name?.trim() || game.state.participants[line.speaker_id]?.name || 'Unknown';
+      lines.push(`${label}: ${line.line}`);
+    }
     return lines;
-  }, [game, storyLine, llmDialogue]);
+  }, [game, storyLine, storyDialogue]);
 
   async function onStart() {
     setError('');
     setLoading(true);
     try {
-      const [catalog, started] = await Promise.all([
-        fetchActionCatalog(),
-        startGame(playerName.trim() || 'Operator', maxRounds),
-      ]);
-      setActions(catalog.actions);
+      const started = await startGame(playerName.trim() || 'Operator', maxRounds);
       setGame(started);
       setAnalytics(null);
       setLlmSummary(null);
-      setLlmDialogue(null);
+      setStoryDialogue([]);
       setTab('narrative');
       setZoomed(true);
       setShowFinalTerminal(false);
       setStoryLine('The first whisper spreads through the room. Everyone is performing for survival.');
-      setActionType(catalog.actions[0]?.action_type ?? 'quiet');
-      setTargetId('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start game');
     } finally {
@@ -140,26 +122,13 @@ export default function GamePage() {
       const next = await submitStoryTurn(game.summary.game_id, playerText);
       setGame(next);
       setStoryLine(next.story?.narration ?? 'You hold your cards close.');
+      setStoryDialogue(next.story?.dialogue ?? []);
       if (next.summary.status === 'completed') {
         const report = await fetchAnalytics(next.summary.game_id);
         setAnalytics(report);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Story turn failed');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onGenerateFlavorDialogue() {
-    if (!game) return;
-    setLoading(true);
-    setError('');
-    try {
-      const dialogue = await fetchFlavorDialogue(game.summary.game_id, dialogueSpeakerId);
-      setLlmDialogue(dialogue);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Dialogue generation failed');
     } finally {
       setLoading(false);
     }
@@ -174,29 +143,6 @@ export default function GamePage() {
       setLlmSummary(summary);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Strategic report unavailable');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onManualAction() {
-    if (!game) return;
-    setLoading(true);
-    setError('');
-    try {
-      const next = await submitAction(
-        game.summary.game_id,
-        actionType,
-        selectedAction?.needs_target ? targetId : null
-      );
-      setGame(next);
-      setStoryLine(`You forced a direct move: ${actionType}.`);
-      if (next.summary.status === 'completed') {
-        const report = await fetchAnalytics(next.summary.game_id);
-        setAnalytics(report);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Manual action failed');
     } finally {
       setLoading(false);
     }
@@ -233,7 +179,7 @@ export default function GamePage() {
             <div className="flex h-full flex-col">
               <div className="flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-xs text-[#86de9b]">
                 <div className="flex gap-2">
-                  {(['narrative', 'dossier', 'signals', 'controls'] as TabId[]).map((id) => (
+                  {(['narrative', 'dossier', 'signals'] as TabId[]).map((id) => (
                     <button
                       key={id}
                       onClick={() => setTab(id)}
@@ -282,53 +228,35 @@ export default function GamePage() {
                 <>
                   {tab === 'narrative' && (
                     <div className="flex min-h-0 flex-1 flex-col">
-                      <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-sm text-[#8de7a2]">
+                      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[17px] leading-relaxed text-[#8de7a2]">
                         {narrativeLines.length === 0 && <p>The game has not begun.</p>}
                         {narrativeLines.map((line, idx) => (
                           <p key={`${idx}-${line.slice(0, 10)}`}>{line}</p>
                         ))}
                       </div>
                       <div className="border-t border-[#2b7a3a]/35 px-3 py-2">
-                        <textarea
+                        <div className="flex items-center gap-2">
+                        <input
                           value={playerText}
                           onChange={(e) => setPlayerText(e.target.value)}
-                          rows={2}
-                          className="w-full rounded border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-sm text-[#9cf8ae]"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              if (!loading && playerText.trim() && game.summary.status === 'active') {
+                                void onStoryTurn();
+                              }
+                            }
+                          }}
+                          className="w-full rounded border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-base text-[#9cf8ae]"
                           placeholder="Type what you say to the group..."
                         />
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
                           <button
                             onClick={onStoryTurn}
                             disabled={loading || !playerText.trim() || game.summary.status !== 'active'}
-                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
+                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-4 py-2 text-sm font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
                           >
-                            {loading ? 'Thinking...' : 'Send'}
+                            {loading ? '...' : 'Enter'}
                           </button>
-                          <select
-                            value={dialogueSpeakerId}
-                            onChange={(e) => setDialogueSpeakerId(e.target.value)}
-                            className="rounded border border-[#2b7a3a]/45 bg-[#061008] px-2 py-1.5 text-xs text-[#9cf8ae]"
-                          >
-                            {aliveTargets.map((t) => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={onGenerateFlavorDialogue}
-                            disabled={loading || aliveTargets.length === 0}
-                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
-                          >
-                            Trigger Dialogue
-                          </button>
-                          {game.summary.status === 'completed' && (
-                            <button
-                              onClick={onGenerateLLMSummary}
-                              disabled={loading}
-                              className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
-                            >
-                              Debrief
-                            </button>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -350,6 +278,15 @@ export default function GamePage() {
 
                   {tab === 'signals' && (
                     <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3">
+                      <div className="flex justify-end">
+                        <button
+                          onClick={onGenerateLLMSummary}
+                          disabled={loading || game.summary.status !== 'completed'}
+                          className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
+                        >
+                          Strategic Debrief
+                        </button>
+                      </div>
                       {analytics ? (
                         <>
                           <TimelineChart title="Trust" data={analytics.analytics.trust_timeline} />
@@ -364,40 +301,6 @@ export default function GamePage() {
                     </div>
                   )}
 
-                  {tab === 'controls' && (
-                    <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-xs text-[#8de7a2]">
-                      <p className="text-[#75cd8b]">Manual move override</p>
-                      <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
-                        <select
-                          value={actionType}
-                          onChange={(e) => setActionType(e.target.value)}
-                          className="rounded border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-xs text-[#9cf8ae]"
-                        >
-                          {actions.map((a) => (
-                            <option key={a.action_type} value={a.action_type}>{a.label}</option>
-                          ))}
-                        </select>
-                        <select
-                          value={targetId}
-                          onChange={(e) => setTargetId(e.target.value)}
-                          disabled={!selectedAction?.needs_target}
-                          className="rounded border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-xs text-[#9cf8ae] disabled:opacity-50"
-                        >
-                          <option value="">Target</option>
-                          {aliveTargets.map((t) => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
-                        <button
-                          onClick={onManualAction}
-                          disabled={loading || (selectedAction?.needs_target && !targetId)}
-                          className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-2 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
-                        >
-                          Execute
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
 

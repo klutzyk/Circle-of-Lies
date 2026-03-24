@@ -15,14 +15,19 @@ from app.db.repository import (
 )
 from app.engine.analytics import build_analytics
 from app.engine.engine import advance_round, create_game
-from app.engine.state import build_participants_from_generated_cast, to_public_state
+from app.engine.state import (
+    build_participants_from_generated_cast,
+    clamp,
+    current_event,
+    to_public_state,
+)
 from app.llm.service import (
     generate_character_cast,
     generate_flavor_dialogue,
-    generate_player_intent_action,
     generate_post_game_analysis,
+    generate_turn_resolution,
 )
-from app.models.domain import GameState
+from app.models.domain import GameState, RoundLog
 
 
 def start_new_game(player_name: str, max_rounds: int) -> GameState:
@@ -142,27 +147,119 @@ def play_story_turn_payload(game_id: str, player_text: str) -> dict:
     if state.status != "active":
         raise HTTPException(status_code=400, detail="Game is not active")
 
-    alive_targets = [
-        {"id": pid, "name": p.name}
+    alive_ids_before = state.alive_ids()
+    cast = [
+        {
+            "participant_id": pid,
+            "name": p.name,
+            "persona": p.persona,
+            "traits": p.traits,
+        }
         for pid, p in state.participants.items()
         if pid != "player" and p.eliminated_round is None
     ]
-    interpreted = generate_player_intent_action(
+    history_tail = [
+        {
+            "round": log.round_number,
+            "event": log.event,
+            "player_action": log.player_action,
+            "eliminated_id": log.eliminated_id,
+            "player_avg_trust": log.summary.get("player_avg_trust"),
+            "player_avg_suspicion": log.summary.get("player_avg_suspicion"),
+        }
+        for log in state.history[-3:]
+    ]
+    llm_turn = generate_turn_resolution(
         game_id=game_id,
-        player_text=player_text,
-        alive_targets=alive_targets,
+        round_number=state.current_round,
         event=state.current_event,
+        player_name=state.player_name,
+        player_text=player_text,
+        cast=cast,
+        history_tail=history_tail,
     )
-    next_state = play_action(
-        game_id=game_id,
-        action_type=interpreted["action_type"],
-        target_id=interpreted["target_id"] or None,
+
+    # LLM-driven trust/suspicion update on player.
+    trust_on_player = llm_turn.get("trust_on_player", {}) if isinstance(llm_turn, dict) else {}
+    suspicion_on_player = (
+        llm_turn.get("suspicion_on_player", {}) if isinstance(llm_turn, dict) else {}
     )
-    payload = public_game_payload(next_state)
+    for pid in alive_ids_before:
+        if pid == "player":
+            continue
+        if pid in trust_on_player:
+            try:
+                state.trust[pid]["player"] = clamp(float(trust_on_player[pid]))
+            except (TypeError, ValueError):
+                pass
+        if pid in suspicion_on_player:
+            try:
+                state.suspicion[pid]["player"] = clamp(float(suspicion_on_player[pid]))
+            except (TypeError, ValueError):
+                pass
+
+    eliminated_id = str(llm_turn.get("eliminated_id", "") or "")
+    if eliminated_id and eliminated_id in alive_ids_before:
+        state.participants[eliminated_id].eliminated_round = state.current_round
+
+    def _player_avg(matrix: dict) -> float:
+        observers = [
+            pid
+            for pid, participant in state.participants.items()
+            if pid != "player" and participant.eliminated_round is None
+        ]
+        if not observers:
+            return 0.0
+        return round(sum(matrix[pid]["player"] for pid in observers) / len(observers), 2)
+
+    ai_actions = llm_turn.get("ai_actions", []) if isinstance(llm_turn, dict) else []
+    if not isinstance(ai_actions, list):
+        ai_actions = []
+
+    summary = {
+        "player_avg_trust": _player_avg(state.trust),
+        "player_avg_suspicion": _player_avg(state.suspicion),
+        "alive_after_vote": state.alive_ids(),
+    }
+
+    state.history.append(
+        RoundLog(
+            round_number=state.current_round,
+            event=state.current_event,
+            player_action={"actor_id": "player", "action_type": "dialogue_turn", "target_id": ""},
+            ai_actions=ai_actions[:5],
+            votes={},
+            eliminated_id=eliminated_id or None,
+            summary=summary,
+        )
+    )
+
+    player_alive = state.participants["player"].eliminated_round is None
+    if not player_alive:
+        state.status = "completed"
+        state.phase = "ended"
+        state.winner = "ai"
+    elif state.current_round >= state.max_rounds or len(state.alive_ids()) <= 2:
+        state.status = "completed"
+        state.phase = "ended"
+        state.winner = "player"
+    else:
+        state.current_round += 1
+        state.current_event = current_event(state.current_round)
+        state.phase = "awaiting_player_action"
+
+    save_game(state)
+    replace_round_logs(state.game_id, state.history)
+    if state.status == "completed":
+        analytics = build_analytics(state)
+        save_analytics(state.game_id, analytics)
+
+    payload = public_game_payload(state)
     payload["story"] = {
         "player_text": player_text,
-        "interpreted_action": interpreted["action_type"],
-        "interpreted_target_id": interpreted["target_id"],
-        "narration": interpreted["narration"],
+        "interpreted_action": "dialogue_turn",
+        "interpreted_target_id": "",
+        "narration": llm_turn.get("narration", ""),
+        "dialogue": llm_turn.get("dialogue", []),
     }
     return payload
