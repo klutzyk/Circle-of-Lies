@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-surface text-ink font-body;
+}
+
+.card {
+  @apply rounded-2xl border border-black/10 bg-white/90 shadow-sm;
+}
+
+.metric-chip {
+  @apply rounded-lg border border-black/10 bg-white px-3 py-2 text-sm;
+}
