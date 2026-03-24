@@ -2,6 +2,9 @@ export type Participant = {
   name: string;
   is_human: boolean;
   traits: Record<string, number>;
+  occupation?: string;
+  backstory?: string;
+  persona?: string;
   eliminated_round: number | null;
 };
 
@@ -68,4 +71,13 @@ export type LLMEnhancementPayload = {
   cached: boolean;
   enabled: boolean;
   reason: string;
+};
+
+export type StoryTurnPayload = GamePayload & {
+  story: {
+    player_text: string;
+    interpreted_action: string;
+    interpreted_target_id: string;
+    narration: string;
+  };
 };

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi import HTTPException
 
+from app.core.config import LLM_ENABLED, LLM_STORY_MODE
 from app.db.repository import (
     get_analytics,
     get_game,
@@ -12,13 +15,23 @@ from app.db.repository import (
 )
 from app.engine.analytics import build_analytics
 from app.engine.engine import advance_round, create_game
-from app.engine.state import to_public_state
-from app.llm.service import generate_flavor_dialogue, generate_post_game_analysis
+from app.engine.state import build_participants_from_generated_cast, to_public_state
+from app.llm.service import (
+    generate_character_cast,
+    generate_flavor_dialogue,
+    generate_player_intent_action,
+    generate_post_game_analysis,
+)
 from app.models.domain import GameState
 
 
 def start_new_game(player_name: str, max_rounds: int) -> GameState:
-    state = create_game(player_name=player_name, max_rounds=max_rounds)
+    participants = None
+    if LLM_ENABLED and LLM_STORY_MODE:
+        generated_cast = generate_character_cast(str(uuid.uuid4()), player_name)
+        if generated_cast:
+            participants = build_participants_from_generated_cast(player_name, generated_cast)
+    state = create_game(player_name=player_name, max_rounds=max_rounds, participants=participants)
     save_game(state)
     replace_round_logs(state.game_id, state.history)
     return state
@@ -122,3 +135,34 @@ def flavor_dialogue_payload(game_id: str, speaker_id: str) -> dict:
         "enabled": result.enabled,
         "reason": result.reason,
     }
+
+
+def play_story_turn_payload(game_id: str, player_text: str) -> dict:
+    state = fetch_game_or_404(game_id)
+    if state.status != "active":
+        raise HTTPException(status_code=400, detail="Game is not active")
+
+    alive_targets = [
+        {"id": pid, "name": p.name}
+        for pid, p in state.participants.items()
+        if pid != "player" and p.eliminated_round is None
+    ]
+    interpreted = generate_player_intent_action(
+        game_id=game_id,
+        player_text=player_text,
+        alive_targets=alive_targets,
+        event=state.current_event,
+    )
+    next_state = play_action(
+        game_id=game_id,
+        action_type=interpreted["action_type"],
+        target_id=interpreted["target_id"] or None,
+    )
+    payload = public_game_payload(next_state)
+    payload["story"] = {
+        "player_text": player_text,
+        "interpreted_action": interpreted["action_type"],
+        "interpreted_target_id": interpreted["target_id"],
+        "narration": interpreted["narration"],
+    }
+    return payload

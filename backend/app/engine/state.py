@@ -120,6 +120,55 @@ def build_default_participants(player_name: str) -> Dict[str, Participant]:
     return participants
 
 
+def build_participants_from_generated_cast(
+    player_name: str, generated_cast: List[dict]
+) -> Dict[str, Participant]:
+    participants = build_default_participants(player_name)
+    required = [
+        "sociability",
+        "aggressiveness",
+        "loyalty",
+        "risk_tolerance",
+        "deception_tendency",
+        "charisma",
+        "suspicion_sensitivity",
+    ]
+    defaults = {
+        "sociability": 0.5,
+        "aggressiveness": 0.5,
+        "loyalty": 0.5,
+        "risk_tolerance": 0.5,
+        "deception_tendency": 0.5,
+        "charisma": 0.5,
+        "suspicion_sensitivity": 0.5,
+    }
+
+    for idx, entry in enumerate(generated_cast[:5], start=1):
+        pid = f"ai_{idx}"
+        raw_traits = entry.get("traits", {}) if isinstance(entry, dict) else {}
+        traits = dict(raw_traits)
+        for key in required:
+            value = raw_traits.get(key, defaults[key])
+            try:
+                traits[key] = max(0.0, min(1.0, float(value)))
+            except (TypeError, ValueError):
+                traits[key] = defaults[key]
+
+        participants[pid] = Participant(
+            participant_id=pid,
+            name=str(entry.get("name", participants[pid].name)),
+            is_human=False,
+            traits=traits,
+            hidden_objective=str(
+                entry.get("hidden_objective", participants[pid].hidden_objective)
+            ),
+            occupation=str(entry.get("occupation", "")),
+            backstory=str(entry.get("backstory", "")),
+            persona=str(entry.get("persona", "")),
+        )
+    return participants
+
+
 def initialize_matrix(participant_ids: List[str], baseline: float) -> Dict[str, Dict[str, float]]:
     matrix: Dict[str, Dict[str, float]] = {}
     for source in participant_ids:
@@ -144,6 +193,9 @@ def to_public_state(state: GameState) -> dict:
                 "name": p.name,
                 "is_human": p.is_human,
                 "traits": p.traits,
+                "occupation": p.occupation,
+                "backstory": p.backstory,
+                "persona": p.persona,
                 "eliminated_round": p.eliminated_round,
             }
             for pid, p in state.participants.items()

@@ -62,6 +62,7 @@ The game ends when the player is eliminated, the round limit is reached, or only
 - `GET /api/games/{game_id}/analytics`: end-of-game analytics
 - `GET /api/games/{game_id}/llm/post-game-analysis`: optional LLM strategic summary
 - `POST /api/games/{game_id}/llm/flavor-dialogue`: optional AI character flavor dialogue
+- `POST /api/games/{game_id}/story-turn`: optional free-text turn interpreted by LLM
 - `GET /api/meta/actions`: action catalog
 
 ## Local Setup
@@ -104,6 +105,7 @@ Backend environment variables:
 ```bash
 LLM_ENABLED=false
 LLM_PROVIDER=gemini   # gemini or openai
+LLM_STORY_MODE=false  # when true, start game can generate cast + use story-turn input
 GEMINI_API_KEY=
 GEMINI_MODEL=gemini-1.5-flash
 OPENAI_API_KEY=
@@ -112,6 +114,7 @@ LLM_TIMEOUT_SECONDS=20
 ```
 
 If `LLM_ENABLED=false` or the provider key is missing, the app continues to work normally using deterministic analytics only.
+If `LLM_STORY_MODE=true`, LLM can generate character bios/traits and map player free-text to in-game actions, while the resolver remains deterministic.
 
 ## Rule-Based vs LLM Tradeoff
 

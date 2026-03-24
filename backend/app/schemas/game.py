@@ -50,6 +50,10 @@ class FlavorDialogueRequest(BaseModel):
     speaker_id: str
 
 
+class StoryTurnRequest(BaseModel):
+    player_text: str = Field(min_length=1, max_length=500)
+
+
 class LLMEnhancementResponse(BaseModel):
     game_id: str
     use_case: str

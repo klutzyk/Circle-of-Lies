@@ -11,6 +11,7 @@ from app.schemas.game import (
     PlayerActionRequest,
     RoundLogsResponse,
     StartGameRequest,
+    StoryTurnRequest,
 )
 from app.services.game_service import (
     analytics_payload,
@@ -18,6 +19,7 @@ from app.services.game_service import (
     flavor_dialogue_payload,
     logs_payload,
     play_action,
+    play_story_turn_payload,
     post_game_llm_analysis_payload,
     public_game_payload,
     start_new_game,
@@ -67,3 +69,8 @@ def get_post_game_analysis(game_id: str):
 @router.post("/games/{game_id}/llm/flavor-dialogue", response_model=LLMEnhancementResponse)
 def get_flavor_dialogue(game_id: str, request: FlavorDialogueRequest):
     return flavor_dialogue_payload(game_id, request.speaker_id)
+
+
+@router.post("/games/{game_id}/story-turn")
+def submit_story_turn(game_id: str, request: StoryTurnRequest):
+    return play_story_turn_payload(game_id, request.player_text)

@@ -50,3 +50,68 @@ def build_flavor_user_prompt(
         f"Traits: {speaker_traits}\n"
         f"Context: {context_event}\n"
     )
+
+
+def build_cast_generation_system_prompt() -> str:
+    return (
+        "You generate coherent social strategy game characters. "
+        "Return strict JSON only. No markdown."
+    )
+
+
+def build_cast_generation_user_prompt(game_id: str, player_name: str) -> str:
+    schema = {
+        "characters": [
+            {
+                "name": "string",
+                "occupation": "string",
+                "persona": "string",
+                "backstory": "string",
+                "hidden_objective": "string",
+                "traits": {
+                    "sociability": 0.0,
+                    "aggressiveness": 0.0,
+                    "loyalty": 0.0,
+                    "risk_tolerance": 0.0,
+                    "deception_tendency": 0.0,
+                    "charisma": 0.0,
+                    "suspicion_sensitivity": 0.0,
+                    "empathy": 0.0,
+                    "discipline": 0.0,
+                },
+            }
+        ]
+    }
+    return (
+        "Create 5 unique contestants for a social strategy simulator. "
+        "Avoid stereotypes. Keep each backstory to 1-2 sentences. "
+        "Use traits on a 0..1 scale.\n"
+        f"Player name: {player_name}\n"
+        f"Game id: {game_id}\n"
+        f"Return JSON matching this schema:\n{json.dumps(schema)}"
+    )
+
+
+def build_player_intent_system_prompt() -> str:
+    return (
+        "Classify player text into one legal action and optional target for a strategy game. "
+        "Return strict JSON only."
+    )
+
+
+def build_player_intent_user_prompt(
+    player_text: str,
+    alive_targets: list[dict],
+    event: str,
+) -> str:
+    schema = {
+        "action_type": "defend|accuse|quiet|share_info|build_alliance|spread_doubt",
+        "target_id": "ai_x or empty string",
+        "narration": "short one sentence describing social intent",
+    }
+    return (
+        f"Event: {event}\n"
+        f"Alive targets: {alive_targets}\n"
+        f"Player message: {player_text}\n"
+        f"Return JSON only in this schema: {json.dumps(schema)}"
+    )

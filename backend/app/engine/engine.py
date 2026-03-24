@@ -14,8 +14,12 @@ from app.engine.state import (
 from app.models.domain import GameState, RoundLog
 
 
-def create_game(player_name: str, max_rounds: int) -> GameState:
-    participants = build_default_participants(player_name)
+def create_game(
+    player_name: str,
+    max_rounds: int,
+    participants: Optional[dict] = None,
+) -> GameState:
+    participants = participants or build_default_participants(player_name)
     ids = list(participants.keys())
     trust = initialize_matrix(ids, 50)
     suspicion = initialize_matrix(ids, 25)

@@ -1,21 +1,45 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
-  @apply bg-surface text-ink font-body;
+  background:
+    radial-gradient(circle at 10% 5%, rgba(9, 52, 24, 0.35), transparent 35%),
+    radial-gradient(circle at 80% 0%, rgba(11, 34, 50, 0.38), transparent 45%),
+    #060c08;
+  @apply font-body text-[#8af5a1];
+  font-family: 'JetBrains Mono', monospace;
+  min-height: 100vh;
 }
 
 .card {
-  @apply rounded-2xl border border-black/10 bg-white/90 shadow-sm;
+  @apply rounded-xl border border-[#2b7a3a]/45 bg-[#08120b]/80 shadow-[0_0_0_1px_rgba(49,122,68,0.15),0_0_28px_rgba(0,255,120,0.06)];
 }
 
 .metric-chip {
-  @apply rounded-lg border border-black/10 bg-white px-3 py-2 text-sm;
+  @apply rounded-md border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-xs text-[#7de095];
+}
+
+.scanlines {
+  position: relative;
+}
+
+.scanlines::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(131, 255, 164, 0.03) 0px,
+    rgba(131, 255, 164, 0.03) 1px,
+    transparent 2px,
+    transparent 4px
+  );
 }

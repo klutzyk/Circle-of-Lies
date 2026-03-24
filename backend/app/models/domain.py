@@ -15,6 +15,9 @@ class Participant:
     is_human: bool
     traits: TraitMap
     hidden_objective: str
+    occupation: str = ""
+    backstory: str = ""
+    persona: str = ""
     eliminated_round: Optional[int] = None
 
 
