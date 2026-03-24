@@ -5,7 +5,7 @@ export default function HomePage() {
     <main className="scanlines min-h-screen px-6 py-12">
       <div className="mx-auto max-w-5xl">
         <section className="card overflow-hidden p-8 md:p-12">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#7cd892]">Neon Terminal Simulation</p>
+          {/* <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-[#7cd892]">Neon Terminal Simulation</p> */}
           <h1 className="text-4xl font-bold uppercase tracking-[0.14em] text-[#adffbe] md:text-5xl">Circle of Lies</h1>
           <p className="mt-5 max-w-2xl text-sm leading-relaxed text-[#79d48f] md:text-base">
             Enter a dark social arena. Type your intent, shape alliances, and survive the vote as trust and suspicion evolve round by round.

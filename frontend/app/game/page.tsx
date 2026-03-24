@@ -1,9 +1,10 @@
 'use client';
 
 import Image from 'next/image';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import terminalImage from '../../assets/terminal.jpg';
+import terminalFinalImage from '../../assets/terminal4.jpg';
 import {
   fetchActionCatalog,
   fetchAnalytics,
@@ -57,6 +58,7 @@ export default function GamePage() {
   const [storyLine, setStoryLine] = useState('The room is silent. Six minds scan for weakness.');
   const [tab, setTab] = useState<TabId>('narrative');
   const [zoomed, setZoomed] = useState(false);
+  const [showFinalTerminal, setShowFinalTerminal] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -108,6 +110,7 @@ export default function GamePage() {
       setLlmDialogue(null);
       setTab('narrative');
       setZoomed(true);
+      setShowFinalTerminal(false);
       setStoryLine('The first whisper spreads through the room. Everyone is performing for survival.');
       setActionType(catalog.actions[0]?.action_type ?? 'quiet');
       setTargetId('');
@@ -117,6 +120,17 @@ export default function GamePage() {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!zoomed) {
+      setShowFinalTerminal(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setShowFinalTerminal(true);
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [zoomed]);
 
   async function onStoryTurn() {
     if (!game) return;
@@ -189,24 +203,35 @@ export default function GamePage() {
   }
 
   return (
-    <main className="scanlines min-h-screen overflow-hidden px-2 py-2 md:px-4 md:py-4">
-      <div className="mx-auto h-[calc(100vh-1rem)] max-w-[1600px] overflow-hidden rounded-xl border border-[#2b7a3a]/45 bg-black/40">
+    <main className="scanlines flex h-screen w-screen items-center justify-center overflow-hidden p-2 md:p-3">
+      <div className="relative aspect-[16/9] w-[min(96vw,1700px)] max-h-[94vh] overflow-hidden rounded-xl border border-[#2b7a3a]/45 bg-black/40">
         <div
-          className={`relative h-full w-full transition-transform duration-[1400ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] ${
-            zoomed ? 'scale-[1.32] md:scale-[1.25]' : 'scale-100'
+          className={`relative h-full w-full transition-transform duration-[900ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] ${
+            zoomed ? 'scale-[1.06] md:scale-[1]' : 'scale-100'
           }`}
         >
           <Image
             src={terminalImage}
-            alt="Terminal workstation"
+            alt="Terminal workstation initial"
             fill
             priority
-            className="object-cover"
+            className={`object-contain transition-all duration-[1200ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] ${
+              showFinalTerminal ? 'scale-[1.08] opacity-0 blur-[1px]' : 'scale-100 opacity-100 blur-0'
+            }`}
+          />
+          <Image
+            src={terminalFinalImage}
+            alt="Terminal workstation final"
+            fill
+            priority
+            className={`object-contain transition-all duration-[1200ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] ${
+              showFinalTerminal ? 'scale-100 opacity-100 blur-0' : 'scale-[0.94] opacity-0 blur-[2px]'
+            }`}
           />
 
           <section className="absolute left-[19%] top-[13%] h-[47%] w-[62%] rounded-md border border-[#2b7a3a]/35 bg-[#020804]/90 shadow-[0_0_16px_rgba(0,255,128,0.12)]">
             <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-[11px] text-[#86de9b]">
+              <div className="flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-xs text-[#86de9b]">
                 <div className="flex gap-2">
                   {(['narrative', 'dossier', 'signals', 'controls'] as TabId[]).map((id) => (
                     <button
@@ -257,7 +282,7 @@ export default function GamePage() {
                 <>
                   {tab === 'narrative' && (
                     <div className="flex min-h-0 flex-1 flex-col">
-                      <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-xs text-[#8de7a2]">
+                      <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-sm text-[#8de7a2]">
                         {narrativeLines.length === 0 && <p>The game has not begun.</p>}
                         {narrativeLines.map((line, idx) => (
                           <p key={`${idx}-${line.slice(0, 10)}`}>{line}</p>
@@ -268,21 +293,21 @@ export default function GamePage() {
                           value={playerText}
                           onChange={(e) => setPlayerText(e.target.value)}
                           rows={2}
-                          className="w-full rounded border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-xs text-[#9cf8ae]"
+                          className="w-full rounded border border-[#2b7a3a]/45 bg-[#061008] px-3 py-2 text-sm text-[#9cf8ae]"
                           placeholder="Type what you say to the group..."
                         />
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <button
                             onClick={onStoryTurn}
                             disabled={loading || !playerText.trim() || game.summary.status !== 'active'}
-                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
+                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
                           >
                             {loading ? 'Thinking...' : 'Send'}
                           </button>
                           <select
                             value={dialogueSpeakerId}
                             onChange={(e) => setDialogueSpeakerId(e.target.value)}
-                            className="rounded border border-[#2b7a3a]/45 bg-[#061008] px-2 py-1.5 text-[11px] text-[#9cf8ae]"
+                            className="rounded border border-[#2b7a3a]/45 bg-[#061008] px-2 py-1.5 text-xs text-[#9cf8ae]"
                           >
                             {aliveTargets.map((t) => (
                               <option key={t.id} value={t.id}>{t.name}</option>
@@ -291,7 +316,7 @@ export default function GamePage() {
                           <button
                             onClick={onGenerateFlavorDialogue}
                             disabled={loading || aliveTargets.length === 0}
-                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
+                            className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
                           >
                             Trigger Dialogue
                           </button>
@@ -299,7 +324,7 @@ export default function GamePage() {
                             <button
                               onClick={onGenerateLLMSummary}
                               disabled={loading}
-                              className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
+                              className="rounded border border-[#2b7a3a]/45 bg-[#0a200f] px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#9cf8ae] disabled:opacity-50"
                             >
                               Debrief
                             </button>
