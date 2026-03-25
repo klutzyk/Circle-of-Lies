@@ -2,8 +2,6 @@
 
 Circle of Lies is an original social strategy simulator where one human player competes against five AI opponents in a multi-round trust game.
 
-The project is designed for portfolio review and interviews: clear architecture, immersive narrative AI behavior, and end-of-game analytics.
-
 ## Product Concept
 
 - **Genre**: social strategy / social deduction-inspired (original ruleset)
@@ -22,7 +20,7 @@ The project is designed for portfolio review and interviews: clear architecture,
 
 - Frontend: Next.js (App Router), TypeScript, Tailwind CSS
 - Backend: FastAPI, Python
-- Storage: SQLite
+- Database: SQLite
 - Testing: pytest for core engine behavior
 
 ## Architecture
