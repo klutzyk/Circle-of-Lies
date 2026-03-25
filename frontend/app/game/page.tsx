@@ -13,7 +13,11 @@ import {
 } from '@/lib/api';
 import { AnalyticsPayload, GamePayload, LLMEnhancementPayload } from '@/types/game';
 
-type TabId = 'narrative' | 'dossier' | 'signals';
+type TabId = 'narrative' | 'characters' | 'signals';
+type NarrativeEntry =
+  | { type: 'narration'; text: string }
+  | { type: 'dialogue'; speakerId: string; speakerName: string; text: string }
+  | { type: 'event'; text: string };
 
 function TimelineChart({
   title,
@@ -43,6 +47,7 @@ export default function GamePage() {
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [llmSummary, setLlmSummary] = useState<LLMEnhancementPayload | null>(null);
   const [tab, setTab] = useState<TabId>('narrative');
+  const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
   const [zoomed, setZoomed] = useState(false);
   const [showFinalTerminal, setShowFinalTerminal] = useState(false);
   const [error, setError] = useState('');
@@ -51,26 +56,36 @@ export default function GamePage() {
   const previousNarrativeRef = useRef<string[]>([]);
   const narrativeScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const narrativeLines = useMemo(() => {
-    if (!game) return [] as string[];
-    const lines: string[] = [];
+  const narrativeEntries = useMemo(() => {
+    if (!game) return [] as NarrativeEntry[];
+    const entries: NarrativeEntry[] = [];
     const events = game.state.story_events ?? [];
     for (const event of events) {
       if (event.narration) {
-        lines.push(event.narration);
+        entries.push({ type: 'narration', text: event.narration });
       }
       for (const line of event.dialogue ?? []) {
         const label =
           line.speaker_name?.trim() || game.state.participants[line.speaker_id]?.name || 'Unknown';
-        lines.push(`${label}: ${line.line}`);
+        entries.push({
+          type: 'dialogue',
+          speakerId: line.speaker_id,
+          speakerName: label,
+          text: line.line,
+        });
       }
       if (event.eliminated_id) {
         const eliminatedName = game.state.participants[event.eliminated_id]?.name || event.eliminated_id;
-        lines.push(`${eliminatedName} is forced out as the room falls into uneasy silence.`);
+        entries.push({
+          type: 'event',
+          text: `${eliminatedName} is forced out as the room falls into uneasy silence.`,
+        });
       }
     }
-    return lines;
+    return entries;
   }, [game]);
+
+  const narrativeLines = useMemo(() => narrativeEntries.map((entry) => entry.text), [narrativeEntries]);
 
   useEffect(() => {
     setRevealCounts((prev) => {
@@ -90,8 +105,8 @@ export default function GamePage() {
   }, [narrativeLines]);
 
   useEffect(() => {
-    const hasIncompleteLine = narrativeLines.some(
-      (line, idx) => (revealCounts[idx] ?? 0) < line.length
+    const hasIncompleteLine = narrativeEntries.some(
+      (line, idx) => (revealCounts[idx] ?? 0) < line.text.length
     );
     if (!hasIncompleteLine) return;
 
@@ -103,18 +118,91 @@ export default function GamePage() {
         );
         if (lineIdx === -1) return current;
         const currentCount = next[lineIdx] ?? 0;
-        next[lineIdx] = Math.min(currentCount + 1, narrativeLines[lineIdx].length);
+        next[lineIdx] = Math.min(currentCount + 1, narrativeEntries[lineIdx].text.length);
         return next;
       });
     }, 12);
 
     return () => window.clearInterval(timer);
-  }, [narrativeLines, revealCounts]);
+  }, [narrativeEntries, revealCounts]);
 
   useEffect(() => {
     if (!narrativeScrollRef.current) return;
     narrativeScrollRef.current.scrollTop = narrativeScrollRef.current.scrollHeight;
-  }, [narrativeLines, revealCounts]);
+  }, [narrativeEntries, revealCounts]);
+
+  const knownIntelByCharacter = useMemo(() => {
+    if (!game) return {} as Record<string, { quotes: string[]; disclosures: string[]; behaviors: string[] }>;
+    const result: Record<string, { quotes: string[]; disclosures: string[]; behaviors: string[] }> = {};
+    const init = (id: string) => {
+      if (!result[id]) result[id] = { quotes: [], disclosures: [], behaviors: [] };
+      return result[id];
+    };
+
+    for (const event of game.state.story_events ?? []) {
+      for (const d of event.dialogue ?? []) {
+        if (!d.speaker_id || !d.line) continue;
+        const intel = init(d.speaker_id);
+        if (!intel.quotes.includes(d.line)) intel.quotes.push(d.line);
+        const disclosureMatches = d.line.match(
+          /\b(i am|i was|i have|i work|i used to|my family|my job|my team|i don't trust|i trust)\b[^.?!]{0,80}/gi
+        );
+        for (const match of disclosureMatches ?? []) {
+          const clean = match.trim();
+          if (clean && !intel.disclosures.includes(clean)) intel.disclosures.push(clean);
+        }
+      }
+    }
+
+    for (const round of game.state.history ?? []) {
+      for (const action of round.ai_actions ?? []) {
+        const actorId = action.actor_id;
+        if (!actorId || actorId === 'player') continue;
+        const intel = init(actorId);
+        const behaviorMap: Record<string, string> = {
+          accuse: 'Publicly accuses rivals',
+          defend: 'Steps in to defend allies',
+          quiet: 'Stays guarded under pressure',
+          share_info: 'Shares selective information',
+          build_alliance: 'Actively builds alliances',
+          spread_doubt: 'Seeds doubt about others',
+        };
+        const label = behaviorMap[action.action_type] ?? '';
+        if (label && !intel.behaviors.includes(label)) intel.behaviors.push(label);
+      }
+    }
+
+    return result;
+  }, [game]);
+
+  const characterColorClass = (speakerId: string) => {
+    const palette = [
+      'text-[#8de7a2]',
+      'text-[#8ad6ff]',
+      'text-[#ffd27a]',
+      'text-[#f9a8d4]',
+      'text-[#c4b5fd]',
+      'text-[#fca5a5]',
+      'text-[#86efac]',
+    ];
+    if (speakerId === 'player') return 'text-[#7fffd4]';
+    const match = /ai_(\d+)/.exec(speakerId);
+    const idx = match ? Math.max(0, Number(match[1]) - 1) : 0;
+    return palette[idx % palette.length];
+  };
+
+  const avatarGradientClass = (participantId: string) => {
+    const palette = [
+      'from-[#1f2937] to-[#065f46]',
+      'from-[#312e81] to-[#0e7490]',
+      'from-[#3f3f46] to-[#7c2d12]',
+      'from-[#14532d] to-[#1d4ed8]',
+      'from-[#3b0764] to-[#164e63]',
+    ];
+    const match = /(\d+)/.exec(participantId);
+    const idx = match ? Number(match[1]) - 1 : 0;
+    return palette[((idx % palette.length) + palette.length) % palette.length];
+  };
 
   async function onStart() {
     setError('');
@@ -207,11 +295,11 @@ export default function GamePage() {
             }`}
           />
 
-          <section className="absolute left-[19%] top-[12%] h-[53%] w-[62%] rounded-md border border-[#2b7a3a]/35 bg-[#020804]/90 shadow-[0_0_16px_rgba(0,255,128,0.12)]">
+          <section className="absolute left-[19%] top-[10%] h-[60%] w-[62%] rounded-md border border-[#2b7a3a]/35 bg-[#020804]/90 shadow-[0_0_16px_rgba(0,255,128,0.12)]">
             <div className="flex h-full flex-col">
               <div className="flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-xs text-[#86de9b]">
                 <div className="flex gap-2">
-                  {(['narrative', 'dossier', 'signals'] as TabId[]).map((id) => (
+                  {(['narrative', 'characters', 'signals'] as TabId[]).map((id) => (
                     <button
                       key={id}
                       onClick={() => setTab(id)}
@@ -264,12 +352,32 @@ export default function GamePage() {
                         ref={narrativeScrollRef}
                         className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[13px] leading-relaxed text-[#8de7a2]"
                       >
-                        {narrativeLines.length === 0 && <p>The game has not begun.</p>}
-                        {narrativeLines.map((line, idx) => (
-                          <p key={`${idx}-${line.slice(0, 10)}`}>
-                            {line.slice(0, revealCounts[idx] ?? 0)}
-                          </p>
-                        ))}
+                        {narrativeEntries.length === 0 && <p>The game has not begun.</p>}
+                        {narrativeEntries.map((entry, idx) => {
+                          const revealedText = entry.text.slice(0, revealCounts[idx] ?? 0);
+                          if (entry.type === 'dialogue') {
+                            return (
+                              <p key={`${idx}-${entry.speakerId}`}>
+                                <button
+                                  onClick={() => {
+                                    setSelectedCharacterId(entry.speakerId);
+                                    setTab('characters');
+                                  }}
+                                  className={`font-semibold underline-offset-2 hover:underline ${characterColorClass(entry.speakerId)}`}
+                                >
+                                  {entry.speakerName}
+                                </button>
+                                <span className="text-[#8de7a2]">: {revealedText}</span>
+                              </p>
+                            );
+                          }
+                          const extraClass = entry.type === 'event' ? 'text-[#f9d48a]' : 'text-[#8de7a2]';
+                          return (
+                            <p key={`${idx}-${entry.type}`} className={extraClass}>
+                              {revealedText}
+                            </p>
+                          );
+                        })}
                       </div>
                       <div className="border-t border-[#2b7a3a]/35 px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -299,17 +407,109 @@ export default function GamePage() {
                     </div>
                   )}
 
-                  {tab === 'dossier' && (
-                    <div className="min-h-0 flex-1 space-y-2 overflow-auto px-3 py-3 text-xs text-[#8de7a2]">
-                      {Object.entries(game.state.participants).map(([id, p]) => (
-                        <article key={id} className="rounded border border-[#2b7a3a]/45 bg-[#061008] p-2">
-                          <p className="font-semibold text-[#aafebd]">{p.name}{id === 'player' ? ' [YOU]' : ''}</p>
-                          {p.occupation && <p>{p.occupation}</p>}
-                          {p.persona && <p className="text-[#75cd8b]">{p.persona}</p>}
-                          {p.backstory && <p className="mt-1 text-[#6cc482]">{p.backstory}</p>}
-                          <p className="mt-1">Status: {p.eliminated_round ? `out in round ${p.eliminated_round}` : 'active'}</p>
-                        </article>
-                      ))}
+                  {tab === 'characters' && (
+                    <div className="min-h-0 flex flex-1 gap-3 overflow-hidden px-3 py-3 text-xs text-[#8de7a2]">
+                      <aside className="w-52 shrink-0 space-y-2 overflow-auto pr-1">
+                        {Object.entries(game.state.participants)
+                          .filter(([id]) => id !== 'player')
+                          .map(([id, p]) => (
+                            <button
+                              key={id}
+                              onClick={() => setSelectedCharacterId(id)}
+                              className={`flex w-full items-center gap-2 rounded border px-2 py-2 text-left ${
+                                selectedCharacterId === id
+                                  ? 'border-[#7aff95]/70 bg-[#0e1d11]'
+                                  : 'border-[#2b7a3a]/45 bg-[#061008]'
+                              }`}
+                            >
+                              <div
+                                className={`flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br text-[11px] font-bold text-white ${avatarGradientClass(id)}`}
+                              >
+                                {p.name.slice(0, 2).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate font-semibold text-[#aafebd]">{p.name}</p>
+                                <p className="truncate text-[10px] text-[#75cd8b]">
+                                  {p.eliminated_round ? `out (r${p.eliminated_round})` : 'active'}
+                                </p>
+                              </div>
+                            </button>
+                          ))}
+                      </aside>
+
+                      <section className="min-w-0 flex-1 overflow-auto rounded border border-[#2b7a3a]/45 bg-[#061008] p-3">
+                        {(() => {
+                          const fallbackId =
+                            selectedCharacterId && game.state.participants[selectedCharacterId] && selectedCharacterId !== 'player'
+                              ? selectedCharacterId
+                              : Object.keys(game.state.participants).find((id) => id !== 'player');
+                          if (!fallbackId) return <p>No characters available.</p>;
+                          const p = game.state.participants[fallbackId];
+                          const intel = knownIntelByCharacter[fallbackId] ?? {
+                            quotes: [],
+                            disclosures: [],
+                            behaviors: [],
+                          };
+                          return (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br text-sm font-bold text-white ${avatarGradientClass(fallbackId)}`}
+                                >
+                                  {p.name.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold text-[#aafebd]">{p.name}</p>
+                                  <p className="text-[11px] text-[#75cd8b]">
+                                    Status: {p.eliminated_round ? `out in round ${p.eliminated_round}` : 'active'}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9cf8ae]">
+                                  Known Facts
+                                </p>
+                                <p className="mt-1 text-[12px] text-[#87df9d]">
+                                  {intel.disclosures.length > 0
+                                    ? intel.disclosures.slice(0, 4).join(' | ')
+                                    : 'Unknown. No clear self-disclosure yet.'}
+                                </p>
+                              </div>
+
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9cf8ae]">
+                                  Observed Behavior
+                                </p>
+                                <p className="mt-1 text-[12px] text-[#87df9d]">
+                                  {intel.behaviors.length > 0
+                                    ? intel.behaviors.slice(0, 4).join(' | ')
+                                    : 'Insufficient evidence. Keep interacting.'}
+                                </p>
+                              </div>
+
+                              <div>
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#9cf8ae]">
+                                  Recent Quotes
+                                </p>
+                                {intel.quotes.length > 0 ? (
+                                  <div className="mt-1 space-y-1">
+                                    {intel.quotes.slice(-4).map((q, i) => (
+                                      <p key={`${i}-${q.slice(0, 12)}`} className="text-[12px] text-[#8de7a2]">
+                                        "{q}"
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="mt-1 text-[12px] text-[#87df9d]">
+                                    No recorded quotes yet.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </section>
                     </div>
                   )}
 
