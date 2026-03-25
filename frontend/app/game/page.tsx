@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import terminalImage from '../../assets/terminal.jpg';
 import terminalFinalImage from '../../assets/terminal4.jpg';
@@ -42,15 +42,21 @@ export default function GamePage() {
   const [playerText, setPlayerText] = useState('I want to stay calm and align with someone reliable this round.');
   const [analytics, setAnalytics] = useState<AnalyticsPayload | null>(null);
   const [llmSummary, setLlmSummary] = useState<LLMEnhancementPayload | null>(null);
-  const [storyDialogue, setStoryDialogue] = useState<
-    { speaker_id: string; speaker_name: string; line: string }[]
-  >([]);
   const [storyLine, setStoryLine] = useState('The room is silent. Six minds scan for weakness.');
   const [tab, setTab] = useState<TabId>('narrative');
   const [zoomed, setZoomed] = useState(false);
   const [showFinalTerminal, setShowFinalTerminal] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [renderedLines, setRenderedLines] = useState<string[]>([]);
+  const [typingState, setTypingState] = useState<{
+    line: string;
+    index: number;
+    lineIdx: number;
+  } | null>(null);
+  const prevNarrativeRef = useRef<string[]>([]);
+  const narrativeLinesRef = useRef<string[]>([]);
+  const narrativeScrollRef = useRef<HTMLDivElement | null>(null);
 
   const narrativeLines = useMemo(() => {
     if (!game) return [] as string[];
@@ -70,13 +76,66 @@ export default function GamePage() {
         lines.push(`${eliminatedName} is forced out as the room falls into uneasy silence.`);
       }
     }
-    if (storyLine) lines.push(storyLine);
-    for (const line of storyDialogue) {
-      const label = line.speaker_name?.trim() || game.state.participants[line.speaker_id]?.name || 'Unknown';
-      lines.push(`${label}: ${line.line}`);
+    if (events.length === 0 && storyLine) {
+      lines.push(storyLine);
     }
     return lines;
-  }, [game, storyLine, storyDialogue]);
+  }, [game, storyLine]);
+
+  useEffect(() => {
+    narrativeLinesRef.current = narrativeLines;
+    const prev = prevNarrativeRef.current;
+    let common = 0;
+    while (
+      common < prev.length &&
+      common < narrativeLines.length &&
+      prev[common] === narrativeLines[common]
+    ) {
+      common += 1;
+    }
+
+    if (common >= narrativeLines.length) {
+      setRenderedLines(narrativeLines);
+      setTypingState(null);
+      prevNarrativeRef.current = narrativeLines;
+      return;
+    }
+
+    setRenderedLines(narrativeLines.slice(0, common));
+    setTypingState({ line: narrativeLines[common], index: 0, lineIdx: common });
+    prevNarrativeRef.current = narrativeLines;
+  }, [narrativeLines]);
+
+  useEffect(() => {
+    if (!typingState) return;
+    const timer = window.setInterval(() => {
+      setTypingState((current) => {
+        if (!current) return null;
+        const nextIndex = current.index + 1;
+        if (nextIndex >= current.line.length) {
+          setRenderedLines((prev) => [...prev, current.line]);
+          const nextLineIdx = current.lineIdx + 1;
+          const all = narrativeLinesRef.current;
+          if (nextLineIdx < all.length) {
+            return { line: all[nextLineIdx], index: 0, lineIdx: nextLineIdx };
+          }
+          return null;
+        }
+        return { ...current, index: nextIndex };
+      });
+    }, 12);
+
+    return () => window.clearInterval(timer);
+  }, [typingState]);
+
+  const visibleNarrativeLines = typingState
+    ? [...renderedLines, typingState.line.slice(0, typingState.index)]
+    : renderedLines;
+
+  useEffect(() => {
+    if (!narrativeScrollRef.current) return;
+    narrativeScrollRef.current.scrollTop = narrativeScrollRef.current.scrollHeight;
+  }, [visibleNarrativeLines]);
 
   async function onStart() {
     setError('');
@@ -86,11 +145,14 @@ export default function GamePage() {
       setGame(started);
       setAnalytics(null);
       setLlmSummary(null);
-      setStoryDialogue([]);
       setTab('narrative');
       setZoomed(true);
       setShowFinalTerminal(false);
       setStoryLine('The first whisper spreads through the room. Everyone is performing for survival.');
+      setRenderedLines([]);
+      setTypingState(null);
+      prevNarrativeRef.current = [];
+      narrativeLinesRef.current = [];
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start game');
     } finally {
@@ -116,8 +178,7 @@ export default function GamePage() {
     try {
       const next = await submitStoryTurn(game.summary.game_id, playerText);
       setGame(next);
-      setStoryLine(next.story?.narration ?? 'You hold your cards close.');
-      setStoryDialogue(next.story?.dialogue ?? []);
+      setStoryLine('');
       if (next.story?.llm_error) {
         setError(`LLM turn issue: ${next.story.llm_error}`);
       }
@@ -173,7 +234,7 @@ export default function GamePage() {
             }`}
           />
 
-          <section className="absolute left-[19%] top-[13%] h-[47%] w-[62%] rounded-md border border-[#2b7a3a]/35 bg-[#020804]/90 shadow-[0_0_16px_rgba(0,255,128,0.12)]">
+          <section className="absolute left-[19%] top-[12%] h-[53%] w-[62%] rounded-md border border-[#2b7a3a]/35 bg-[#020804]/90 shadow-[0_0_16px_rgba(0,255,128,0.12)]">
             <div className="flex h-full flex-col">
               <div className="flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-xs text-[#86de9b]">
                 <div className="flex gap-2">
@@ -226,9 +287,12 @@ export default function GamePage() {
                 <>
                   {tab === 'narrative' && (
                     <div className="flex min-h-0 flex-1 flex-col">
-                      <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[15px] leading-relaxed text-[#8de7a2]">
-                        {narrativeLines.length === 0 && <p>The game has not begun.</p>}
-                        {narrativeLines.map((line, idx) => (
+                      <div
+                        ref={narrativeScrollRef}
+                        className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[13px] leading-relaxed text-[#8de7a2]"
+                      >
+                        {visibleNarrativeLines.length === 0 && <p>The game has not begun.</p>}
+                        {visibleNarrativeLines.map((line, idx) => (
                           <p key={`${idx}-${line.slice(0, 10)}`}>{line}</p>
                         ))}
                       </div>

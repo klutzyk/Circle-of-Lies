@@ -356,23 +356,42 @@ def generate_conversation_beat(
 def generate_turn_resolution(
     game_id: str,
     round_number: int,
+    scene_step: int,
     event: str,
     player_name: str,
     player_text: str,
     cast: list[dict],
     history_tail: list[dict],
+    recent_story_tail: list[dict],
 ) -> dict:
+    player_excerpt = " ".join(player_text.strip().split()[:10]).strip()
+    if player_excerpt:
+        player_excerpt = f"'{player_excerpt}'"
+    else:
+        player_excerpt = "'your last statement'"
+
+    fallback_narration = (
+        f"Neon light hums above the table while the room measures {player_name}'s words against old grudges. "
+        f"Two contestants exchange a quick look when {player_excerpt} lands harder than expected. "
+        "No one relaxes; everyone is quietly recalculating who can be useful for one more vote."
+    )
+    fallback_templates = [
+        "That sounded composed, but I am checking whether your timing protects someone specific.",
+        "Calm words are easy; I care about who benefits if we follow your lead.",
+        "If you want trust, give us one concrete name and one concrete reason.",
+        "You are managing tone well, but this room rewards receipts, not posture.",
+    ]
     fallback_dialogue = []
-    for c in cast[:2]:
+    for idx, c in enumerate(cast[:3]):
         fallback_dialogue.append(
             {
                 "speaker_id": c.get("participant_id", ""),
                 "speaker_name": c.get("name", "Contestant"),
-                "line": "I heard what you said. I am watching who moves with intent and who hides.",
+                "line": fallback_templates[idx % len(fallback_templates)],
             }
         )
     fallback = {
-        "narration": "A cautious silence follows your words; alliances tighten behind guarded expressions.",
+        "narration": fallback_narration,
         "dialogue": fallback_dialogue,
         "trust_on_player": {},
         "suspicion_on_player": {},
@@ -386,11 +405,13 @@ def generate_turn_resolution(
     payload = {
         "game_id": game_id,
         "round_number": round_number,
+        "scene_step": scene_step,
         "event": event,
         "player_name": player_name,
         "player_text": player_text,
         "cast": cast,
         "history_tail": history_tail,
+        "recent_story_tail": recent_story_tail,
     }
     cache_key = _hash_payload(payload)
     cached = get_llm_cache(game_id, "turn_resolution", cache_key)
@@ -409,11 +430,13 @@ def generate_turn_resolution(
             build_turn_resolution_user_prompt(
                 game_id=game_id,
                 round_number=round_number,
+                scene_step=scene_step,
                 event=event,
                 player_name=player_name,
                 player_text=player_text,
                 cast=cast,
                 history_tail=history_tail,
+                recent_story_tail=recent_story_tail,
             ),
             json_mode=True,
         )
@@ -421,9 +444,40 @@ def generate_turn_resolution(
             parsed = _safe_json_loads(text)
         except json.JSONDecodeError:
             parsed = _repair_json_with_model(provider, text)
+        narration = str(parsed.get("narration", fallback["narration"])).strip()
+        recent_narrations = {
+            str(item.get("narration", "")).strip().lower()
+            for item in recent_story_tail
+            if isinstance(item, dict)
+        }
+        if not narration or narration.lower() in recent_narrations:
+            narration = fallback["narration"]
+
+        dialogue = parsed.get("dialogue", [])
+        if not isinstance(dialogue, list):
+            dialogue = []
+        cleaned_dialogue = []
+        seen_speakers = set()
+        for item in dialogue:
+            if not isinstance(item, dict):
+                continue
+            speaker_id = str(item.get("speaker_id", "")).strip()
+            speaker_name = str(item.get("speaker_name", "")).strip()
+            line = str(item.get("line", "")).strip()
+            if not speaker_id or not line:
+                continue
+            if speaker_id in seen_speakers and len(cleaned_dialogue) >= 2:
+                continue
+            seen_speakers.add(speaker_id)
+            cleaned_dialogue.append(
+                {"speaker_id": speaker_id, "speaker_name": speaker_name, "line": line}
+            )
+            if len(cleaned_dialogue) >= 4:
+                break
+
         result = {
-            "narration": str(parsed.get("narration", fallback["narration"])),
-            "dialogue": parsed.get("dialogue", []),
+            "narration": narration,
+            "dialogue": cleaned_dialogue,
             "trust_on_player": parsed.get("trust_on_player", {}),
             "suspicion_on_player": parsed.get("suspicion_on_player", {}),
             "eliminated_id": str(parsed.get("eliminated_id", "") or ""),

@@ -152,14 +152,27 @@ def play_story_turn_payload(game_id: str, player_text: str) -> dict:
         }
         for log in state.history[-3:]
     ]
+    recent_story_tail = [
+        {
+            "round_number": event.get("round_number"),
+            "scene_step": event.get("scene_step"),
+            "narration": event.get("narration"),
+            "dialogue": event.get("dialogue", []),
+            "eliminated_id": event.get("eliminated_id"),
+        }
+        for event in state.story_events[-3:]
+        if isinstance(event, dict)
+    ]
     llm_turn = generate_turn_resolution(
         game_id=game_id,
         round_number=state.current_round,
+        scene_step=state.scene_step,
         event=state.current_event,
         player_name=state.player_name,
         player_text=player_text,
         cast=cast,
         history_tail=history_tail,
+        recent_story_tail=recent_story_tail,
     )
 
     # LLM-driven trust/suspicion update on player.
