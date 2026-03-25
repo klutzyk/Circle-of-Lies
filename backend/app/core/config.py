@@ -29,3 +29,8 @@ GEMINI_RETRY_MAX_SECONDS = float(os.getenv("GEMINI_RETRY_MAX_SECONDS", "8.0"))
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_MODEL = os.getenv("HF_MODEL", "")
+HF_BASE_URL = os.getenv("HF_BASE_URL", "https://router.huggingface.co/v1")
+HF_ENABLE_THINKING = os.getenv("HF_ENABLE_THINKING", "false").lower() == "true"
