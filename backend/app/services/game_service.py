@@ -41,18 +41,18 @@ def _opening_scene(state: GameState) -> dict:
 
     event_title = state.current_event or "opening social trial"
     narration = (
-        "Cold light spills across a polished table as the doors seal and the game begins. "
-        f"Tonight's pressure point is {event_title.lower()}, and every promise is treated like potential bait. "
-        f"{featured_names} trade controlled smiles while privately testing who can be trusted for a single vote. "
-        f"You are {state.player_name}, entering a contest built on persuasion, misdirection, and timing: "
-        "survive each elimination, shape the room's story before others shape it for you, and reach the end with enough influence to claim the win."
+        "Music rises, lights warm, and the host welcomes everyone to Circle of Lies with a grin that says fun and danger in equal measure. "
+        f"Tonight's featured challenge is {event_title.lower()}, where social pressure matters as much as logic. "
+        f"{featured_names} laugh, size each other up, and start testing early alliances before the first vote window opens. "
+        f"You are {state.player_name}. Your mission is clear: build trust, manage suspicion, survive eliminations, "
+        "and finish with the strongest social position when the final decision lands."
     )
 
     dialogue = []
     opener_templates = [
-        "Let's be clear: charm is cheap, consistency is expensive.",
-        "I can work with anyone tonight, but I won't carry dead weight.",
-        "Everyone says trust me on day one. Bring evidence instead.",
+        "All right, first night. I am open to alliances, but I need receipts, not vibes.",
+        "I came to play smart and social, so if you have a plan, bring me in early.",
+        "No panic, no grandstanding. We can win this by reading people before we rush the vote.",
     ]
     for idx, participant in enumerate(ai_alive[:3]):
         dialogue.append(

@@ -19,6 +19,11 @@ type NarrativeEntry =
   | { type: 'dialogue'; speakerId: string; speakerName: string; text: string }
   | { type: 'event'; text: string };
 
+function displayTextForEntry(entry: NarrativeEntry): string {
+  if (entry.type === 'dialogue') return `${entry.speakerName}: ${entry.text}`;
+  return entry.text;
+}
+
 function TimelineChart({
   title,
   data,
@@ -60,7 +65,16 @@ export default function GamePage() {
     if (!game) return [] as NarrativeEntry[];
     const entries: NarrativeEntry[] = [];
     const events = game.state.story_events ?? [];
+    const playerLabel = game.state.participants['player']?.name || 'You';
     for (const event of events) {
+      if (event.player_text?.trim()) {
+        entries.push({
+          type: 'dialogue',
+          speakerId: 'player',
+          speakerName: playerLabel,
+          text: event.player_text.trim(),
+        });
+      }
       if (event.narration) {
         entries.push({ type: 'narration', text: event.narration });
       }
@@ -85,7 +99,10 @@ export default function GamePage() {
     return entries;
   }, [game]);
 
-  const narrativeLines = useMemo(() => narrativeEntries.map((entry) => entry.text), [narrativeEntries]);
+  const narrativeLines = useMemo(
+    () => narrativeEntries.map((entry) => displayTextForEntry(entry)),
+    [narrativeEntries]
+  );
 
   useEffect(() => {
     setRevealCounts((prev) => {
@@ -105,9 +122,7 @@ export default function GamePage() {
   }, [narrativeLines]);
 
   useEffect(() => {
-    const hasIncompleteLine = narrativeEntries.some(
-      (line, idx) => (revealCounts[idx] ?? 0) < line.text.length
-    );
+    const hasIncompleteLine = narrativeLines.some((line, idx) => (revealCounts[idx] ?? 0) < line.length);
     if (!hasIncompleteLine) return;
 
     const timer = window.setInterval(() => {
@@ -118,7 +133,7 @@ export default function GamePage() {
         );
         if (lineIdx === -1) return current;
         const currentCount = next[lineIdx] ?? 0;
-        next[lineIdx] = Math.min(currentCount + 1, narrativeEntries[lineIdx].text.length);
+        next[lineIdx] = Math.min(currentCount + 1, narrativeLines[lineIdx].length);
         return next;
       });
     }, 12);
@@ -177,13 +192,13 @@ export default function GamePage() {
 
   const characterColorClass = (speakerId: string) => {
     const palette = [
-      'text-[#8de7a2]',
       'text-[#8ad6ff]',
       'text-[#ffd27a]',
       'text-[#f9a8d4]',
       'text-[#c4b5fd]',
       'text-[#fca5a5]',
-      'text-[#86efac]',
+      'text-[#fb923c]',
+      'text-[#93c5fd]',
     ];
     if (speakerId === 'player') return 'text-[#7fffd4]';
     const match = /ai_(\d+)/.exec(speakerId);
@@ -295,9 +310,17 @@ export default function GamePage() {
             }`}
           />
 
-          <section className="absolute left-[19%] top-[10%] h-[60%] w-[62%] rounded-md border border-[#2b7a3a]/35 bg-[#020804]/90 shadow-[0_0_16px_rgba(0,255,128,0.12)]">
+          <section
+            className={`absolute left-[19%] top-[10%] h-[60%] w-[62%] rounded-md border border-[#2b7a3a]/35 shadow-[0_0_16px_rgba(0,255,128,0.12)] ${
+              game ? 'bg-[#000000]/96' : 'bg-[#020804]/90'
+            }`}
+          >
             <div className="flex h-full flex-col">
-              <div className="flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-xs text-[#86de9b]">
+              <div
+                className={`flex items-center justify-between border-b border-[#2b7a3a]/35 px-3 py-2 text-xs text-[#86de9b] ${
+                  game ? 'bg-[#030503]/95' : 'bg-transparent'
+                }`}
+              >
                 <div className="flex gap-2">
                   {(['narrative', 'characters', 'signals'] as TabId[]).map((id) => (
                     <button
@@ -316,7 +339,9 @@ export default function GamePage() {
 
               {!game && (
                 <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                  <p className="text-sm text-[#93f6ab]">Night settles over the compound. Six contestants enter. One will control the room.</p>
+                  <p className="rounded border border-[#2b7a3a]/35 bg-[#010302]/72 px-4 py-2 text-sm text-[#b7ffc6] [text-shadow:0_1px_8px_rgba(0,0,0,0.85)]">
+                    Night settles over the compound. Six contestants enter. One will control the room.
+                  </p>
                   <div className="grid w-full max-w-lg gap-2 md:grid-cols-[1fr_120px_140px]">
                     <input
                       value={playerName}
@@ -350,12 +375,21 @@ export default function GamePage() {
                     <div className="flex min-h-0 flex-1 flex-col">
                       <div
                         ref={narrativeScrollRef}
-                        className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-4 text-[13px] leading-relaxed text-[#8de7a2]"
+                        className="min-h-0 flex-1 space-y-3 overflow-auto bg-[#000000] px-4 py-4 text-[13px] leading-relaxed text-[#8de7a2]"
                       >
                         {narrativeEntries.length === 0 && <p>The game has not begun.</p>}
                         {narrativeEntries.map((entry, idx) => {
-                          const revealedText = entry.text.slice(0, revealCounts[idx] ?? 0);
+                          const lineRender = narrativeLines[idx]?.slice(0, revealCounts[idx] ?? 0) ?? '';
                           if (entry.type === 'dialogue') {
+                            const prefix = `${entry.speakerName}: `;
+                            if ((revealCounts[idx] ?? 0) < prefix.length) {
+                              return (
+                                <p key={`${idx}-${entry.speakerId}`} className={characterColorClass(entry.speakerId)}>
+                                  {lineRender}
+                                </p>
+                              );
+                            }
+                            const revealedBody = lineRender.slice(prefix.length);
                             return (
                               <p key={`${idx}-${entry.speakerId}`}>
                                 <button
@@ -367,14 +401,14 @@ export default function GamePage() {
                                 >
                                   {entry.speakerName}
                                 </button>
-                                <span className="text-[#8de7a2]">: {revealedText}</span>
+                                <span className="text-[#8de7a2]">: {revealedBody}</span>
                               </p>
                             );
                           }
                           const extraClass = entry.type === 'event' ? 'text-[#f9d48a]' : 'text-[#8de7a2]';
                           return (
                             <p key={`${idx}-${entry.type}`} className={extraClass}>
-                              {revealedText}
+                              {lineRender}
                             </p>
                           );
                         })}
