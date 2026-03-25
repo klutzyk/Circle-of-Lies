@@ -68,8 +68,6 @@ The game ends when the player is eliminated, the round limit is reached, or only
 
 ```bash
 cd backend
-python -m venv .venv
-. .venv/Scripts/activate  # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 # Optional: copy .env.example to .env and set provider keys if you want LLM enhancements.
 uvicorn app.main:app --reload --port 8000
@@ -100,11 +98,15 @@ These remain feature-flagged and can be configured per environment.
 Backend environment variables:
 
 ```bash
-LLM_ENABLED=false
+LLM_ENABLED=true
 LLM_PROVIDER=gemini   # gemini or openai
 LLM_STORY_MODE=false  # when true, start game can generate cast + use story-turn input
 GEMINI_API_KEY=
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite-preview
+GEMINI_FALLBACK_MODELS=gemini-2.5-flash-lite,gemini-2.5-flash
+GEMINI_MAX_RETRIES=3
+GEMINI_RETRY_BASE_SECONDS=1.0
+GEMINI_RETRY_MAX_SECONDS=10.0
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
 LLM_TIMEOUT_SECONDS=20
@@ -112,8 +114,3 @@ LLM_TIMEOUT_SECONDS=20
 
 If `LLM_ENABLED=false` or the provider key is missing, LLM features return safe fallback responses.
 If `LLM_STORY_MODE=true`, LLM can generate character bios/traits and resolve free-text story turns with character reactions.
-
-## LLM Tradeoff
-
-- LLM-driven turns increase immersion and social realism.
-- Responses are non-deterministic and may vary between runs.
