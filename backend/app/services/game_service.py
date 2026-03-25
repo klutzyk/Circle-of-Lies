@@ -30,6 +30,54 @@ from app.llm.service import (
 from app.models.domain import GameState, RoundLog
 
 
+def _opening_scene(state: GameState) -> dict:
+    ai_alive = [
+        p for pid, p in state.participants.items() if pid != "player" and p.eliminated_round is None
+    ]
+    names = [p.name for p in ai_alive]
+    featured_names = ", ".join(names[:3]) if names else "the contestants"
+    if len(names) > 3:
+        featured_names = f"{featured_names}, and {len(names) - 3} others"
+
+    event_title = state.current_event or "opening social trial"
+    narration = (
+        "Cold light spills across a polished table as the doors seal and the game begins. "
+        f"Tonight's pressure point is {event_title.lower()}, and every promise is treated like potential bait. "
+        f"{featured_names} trade controlled smiles while privately testing who can be trusted for a single vote. "
+        f"You are {state.player_name}, entering a contest built on persuasion, misdirection, and timing: "
+        "survive each elimination, shape the room's story before others shape it for you, and reach the end with enough influence to claim the win."
+    )
+
+    dialogue = []
+    opener_templates = [
+        "Let's be clear: charm is cheap, consistency is expensive.",
+        "I can work with anyone tonight, but I won't carry dead weight.",
+        "Everyone says trust me on day one. Bring evidence instead.",
+    ]
+    for idx, participant in enumerate(ai_alive[:3]):
+        dialogue.append(
+            {
+                "speaker_id": participant.participant_id,
+                "speaker_name": participant.name,
+                "line": opener_templates[idx % len(opener_templates)],
+            }
+        )
+
+    return {
+        "round_number": state.current_round,
+        "scene_step": 0,
+        "player_text": "",
+        "narration": narration,
+        "dialogue": dialogue,
+        "eliminated_id": None,
+        "summary": {
+            "player_avg_trust": 50.0,
+            "player_avg_suspicion": 25.0,
+            "alive_after_vote": state.alive_ids(),
+        },
+    }
+
+
 def start_new_game(player_name: str, max_rounds: int) -> GameState:
     participants = None
     if LLM_ENABLED and LLM_STORY_MODE:
@@ -37,6 +85,7 @@ def start_new_game(player_name: str, max_rounds: int) -> GameState:
         if generated_cast:
             participants = build_participants_from_generated_cast(player_name, generated_cast)
     state = create_game(player_name=player_name, max_rounds=max_rounds, participants=participants)
+    state.story_events.append(_opening_scene(state))
     save_game(state)
     replace_round_logs(state.game_id, state.history)
     return state
